@@ -49,7 +49,7 @@ if st.button("     "):
             )
 
             # 결과 출력
-            translated_text =
+            translated_text = response.output_text
 
             st.subheader("     ")
             st.success(     )
