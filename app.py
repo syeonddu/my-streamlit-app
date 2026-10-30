@@ -43,8 +43,8 @@ if st.button("     "):
             response = client.responses.create(
                 model="gpt-4o-mini",
                 input=[
-                    {"role": "system", "content":    },
-                    {"role": "user", "content":    }
+                    {"role": "system", "content": sys_role},
+                    {"role": "user", "content": prompt}
                 ]
             )
 
