@@ -1224,15 +1224,22 @@ def review_email(rcpt, subject, body, context=""):
         resp = get_client().responses.create(
             model=MODEL,
             instructions="\n".join([
-                "당신은 '김 대리'의 개인 비서 '에이블'입니다. 김 대리가 메일을 보내기 전에 마지막으로 점검합니다.",
+                "당신은 '김 대리'의 개인 비서 '에이블'입니다. 김 대리가 메일을 보내기 전에 마지막으로 한 번 점검합니다.",
+                f"오늘 날짜: {today.isoformat()} ({WEEKDAYS[today.weekday()]}요일)",
+                date_table(),
                 "아래 다섯 항목을 모두 점검해 항목마다 ok(true/false)와 짧은 comment를 씁니다.",
+                "실제로 잘못 보낼 위험이 있을 때만 false로 하고, 사소하거나 애매하면 ok=true로 둡니다.",
                 "- 받는 사람: [요청/상황]에서 의도한 사람과 [받는 사람] 정보가 맞는지. 요청에 받는 사람 언급이 없으면 ok.",
-                "- 내용 정확성: 본문에 [요청/상황]·[참고 자료]에 없는 날짜·숫자·약속·사실이 들어갔는지. 지어낸 내용이 있으면 false.",
+                "- 내용 정확성: 본문의 날짜·숫자·약속이 [요청/상황]·[이전 대화]·[참고 자료]와 '어긋날' 때만 false.",
+                "  '내일', '금요일', '다음 주 화요일'처럼 요청한 표현을 [날짜표]에 맞는 실제 날짜(예: 11월 7일)로 바꿔 쓴 것은 정상(ok)입니다.",
+                "  요일과 날짜가 날짜표와 맞지 않거나, 요청과 다른 날짜·금액이 들어간 경우만 문제입니다.",
+                "  메일에 흔히 들어가는 인사·마무리 문장, 요청 내용을 정리한 표현은 지어낸 내용이 아닙니다.",
                 "- 빠진 내용: 요청한 내용이 빠졌는지, '첨부'를 언급했는데 실제 첨부가 없는지(이 메일은 첨부를 보낼 수 없음).",
                 "- 말투·맞춤법: 받는 사람에게 맞는 정중한 말투인지, 오탈자가 있는지.",
                 "- 민감 정보: 비밀번호·주민번호·계좌번호 같은 민감 정보가 들어 있는지.",
                 "비교할 자료가 없어 판단할 수 없으면 추측하지 말고 ok=true, comment에 '비교할 자료 없음'이라고 씁니다.",
-                "summary: 김 대리에게 하는 한 문장 결론 (예: '보내도 괜찮아 보여요.' / '요청에 없는 날짜가 있어 확인이 필요해요.').",
+                "summary: 김 대리에게 하는 한 문장 결론. 문제가 없으면 '보내도 괜찮아 보여요.',",
+                "  문제가 있으면 무엇이 왜 문제인지 구체적으로 (예: '요청은 금요일인데 본문에 목요일(11/6)로 적혀 있어요.').",
             ]),
             input=(f"[받는 사람] {who} <{rcpt['email']}>\n\n[요청/상황]\n{context or '(없음)'}\n\n"
                    f"[제목] {subject}\n\n[본문]\n{body}"),
@@ -1906,36 +1913,280 @@ def _decide_cb(choice):
 
 
 def render_pending_event():
-    # 일정 충돌 → 사용자 승인: 대체 시간 선택 / 원래 시간으로 등록 / 취소
+    from datetime import datetime, date, time
+
+    # 날짜·시간 비교용 변환 함수
+    def to_date(value):
+        if isinstance(value, datetime):
+            return value.date()
+        if isinstance(value, date):
+            return value
+
+        return date.fromisoformat(str(value).strip()[:10])
+
+    def to_time(value):
+        if isinstance(value, datetime):
+            return value.time()
+        if isinstance(value, time):
+            return value
+
+        # "16:10", "16:10:00" 형식 지원
+        return time.fromisoformat(str(value).strip())
+
     p = st.session_state.get("pending_event")
     if not p:
         return
+
     f = p["fields"]
-    conflicts = find_conflicts(f["date"], f["start"], f["end"], p["event_id"])
+    event_id = p.get("event_id")
+    what = "수정" if p.get("mode") == "edit" else "추가"
+
+    conflicts = find_conflicts(
+        f["date"],
+        f["start"],
+        f["end"],
+        event_id,
+    )
+
+    original_date = to_date(f["date"])
+    original_start = datetime.combine(
+        original_date,
+        to_time(f["start"]),
+    )
+
+    suggestions = []
+
+    for original_index, slot in enumerate(p.get("suggestions") or []):
+        slot_date = to_date(slot["date"])
+        slot_start = datetime.combine(
+            slot_date,
+            to_time(slot["start"]),
+        )
+
+        # 기존 충돌 검사 함수의 입력 방식 유지
+        available = is_free(
+            slot["date"],
+            parse_time(slot["start"]),
+            parse_time(slot["end"]),
+            event_id,
+        )
+
+        suggestions.append({
+            "slot": slot,
+            # 화면 정렬 후에도 원래 추천 번호를 콜백에 전달
+            "original_index": original_index,
+            "available": available,
+            "same_day": slot_date == original_date,
+            "difference_minutes": int(
+                (slot_start - original_start).total_seconds() / 60
+            ),
+        })
+
+    # 선택 가능 → 같은 날 → 원래 시작 시간과 가까운 순
+    suggestions.sort(
+        key=lambda item: (
+            not item["available"],
+            not item["same_day"],
+            abs(item["difference_minutes"]),
+            item["original_index"],
+        )
+    )
+
     with st.container(border=True):
-        what = "수정" if p["mode"] == "edit" else "추가"
-        st.warning(f"⚠️ 일정 충돌 감지 — {what}하려는 '{f['title']}' "
-                   f"({fmt_date(parse_date(f['date']))} {event_time_text(f)}, {f['category']})")
+        event_description = (
+            f"{what}하려는 '{f['title']}' "
+            f"({fmt_date(original_date)} "
+            f"{event_time_text(f)}, {f['category']})"
+        )
+
         if conflicts:
-            st.markdown("<br>".join(f"{badge(c['category'], ev_color(c))}{html.escape(c['title'])} · "
-                                    f"{event_time_text(c)} — <b>{c['reason']}</b>" for c in conflicts),
-                        unsafe_allow_html=True)
-            st.caption("기존 일정과 겹치거나 앞뒤 간격이 10분 미만이에요. 어떻게 할까요?")
+            st.warning(
+                f"⚠️ 일정 충돌 감지 — {event_description}"
+            )
+
+            st.markdown("**충돌하는 기존 일정**")
+
+            conflict_lines = []
+
+            for conflict in conflicts:
+                conflict_lines.append(
+                    f"{badge(conflict['category'], ev_color(conflict))}"
+                    f"{html.escape(str(conflict['title']))} · "
+                    f"{html.escape(str(event_time_text(conflict)))}"
+                    f" — <b>"
+                    f"{html.escape(str(conflict.get('reason', '일정 충돌')))}"
+                    f"</b>"
+                )
+
+            st.markdown(
+                "<br>".join(conflict_lines),
+                unsafe_allow_html=True,
+            )
+
+            st.caption(
+                "기존 일정과 겹치거나 앞뒤 간격이 10분 미만이에요. "
+                "대체 시간을 선택하거나 원래 시간으로 등록할 수 있어요."
+            )
+
+            st.markdown("**대체 시간 추천**")
+
+            with st.expander("추천 기준 보기", expanded=False):
+                st.write(
+                    "업무 시간 09:00–18:00 · "
+                    "점심시간 12:00–13:00 제외 · "
+                    "일정 앞뒤 10분 여유"
+                )
+
+                st.caption(
+                    "선택 가능한 시간을 우선하고, 같은 날의 시간부터 "
+                    "원래 시작 시간과 가까운 순서로 표시해요."
+                )
+
+            if suggestions:
+                available_count = sum(
+                    bool(item["available"])
+                    for item in suggestions
+                )
+
+                if available_count == 0:
+                    st.info(
+                        "기존 추천 시간에도 충돌이 생겼어요. "
+                        "취소 후 날짜나 시간을 바꿔 다시 시도해 주세요."
+                    )
+
+                # 한 줄에 최대 3개의 추천 표시
+                for row_start in range(0, len(suggestions), 3):
+                    row = suggestions[row_start:row_start + 3]
+                    cols = st.columns(len(row))
+
+                    for offset, item in enumerate(row):
+                        display_index = row_start + offset
+                        slot = item["slot"]
+                        available = item["available"]
+
+                        with cols[offset]:
+                            with st.container(border=True):
+                                if available and display_index == 0:
+                                    st.markdown("**⭐ 우선 추천**")
+                                else:
+                                    st.markdown(
+                                        f"**대체 시간 {display_index + 1}**"
+                                    )
+
+                                st.text(slot_text(slot))
+
+                                if available:
+                                    if item["same_day"]:
+                                        delta = item["difference_minutes"]
+
+                                        if delta == 0:
+                                            reason = (
+                                                "원래 시작 시간과 같아요."
+                                            )
+                                        else:
+                                            direction = (
+                                                "늦춘"
+                                                if delta > 0
+                                                else "앞당긴"
+                                            )
+
+                                            hours, minutes = divmod(
+                                                abs(delta), 60
+                                            )
+
+                                            duration_parts = []
+
+                                            if hours:
+                                                duration_parts.append(
+                                                    f"{hours}시간"
+                                                )
+
+                                            if minutes:
+                                                duration_parts.append(
+                                                    f"{minutes}분"
+                                                )
+
+                                            duration_text = " ".join(
+                                                duration_parts
+                                            )
+
+                                            reason = (
+                                                "원래 일정과 같은 날이에요. "
+                                                f"시작을 {duration_text} "
+                                                f"{direction} 시간이에요."
+                                            )
+                                    else:
+                                        reason = (
+                                            "다른 날짜에 확보할 수 있는 "
+                                            "대체 시간이에요."
+                                        )
+
+                                    st.caption(reason)
+                                    st.caption("✅ 현재 충돌 없음")
+
+                                else:
+                                    st.caption(
+                                        "⛔ 다른 일정과 충돌해 "
+                                        "선택할 수 없어요."
+                                    )
+
+                                st.button(
+                                    "이 시간으로 등록",
+                                    key=(
+                                        f"pe_s{item['original_index']}"
+                                    ),
+                                    on_click=_decide_cb,
+                                    args=(
+                                        str(
+                                            item["original_index"] + 1
+                                        ),
+                                    ),
+                                    use_container_width=True,
+                                    disabled=not available,
+                                    type=(
+                                        "primary"
+                                        if available and display_index == 0
+                                        else "secondary"
+                                    ),
+                                )
+
+            else:
+                st.info(
+                    "2주 안에서 조건에 맞는 업무 시간을 "
+                    "찾지 못했어요. "
+                    "취소 후 날짜나 시간을 바꿔 다시 시도해 주세요."
+                )
+
         else:
-            st.caption("지금은 겹치는 일정이 없어졌어요. 원래 시간으로 등록할 수 있어요.")
-        sugg = p["suggestions"]
-        if sugg:
-            st.markdown("**대체 시간 추천** · 업무 시간 9~18시, 점심 12~13시 제외, 앞뒤 10분 여유")
-            cols = st.columns(len(sugg))
-            for i, s in enumerate(sugg):
-                ok = is_free(s["date"], parse_time(s["start"]), parse_time(s["end"]), p["event_id"])
-                cols[i].button(f"{i + 1}. {slot_text(s)}", key=f"pe_s{i}", on_click=_decide_cb, args=(str(i + 1),),
-                               use_container_width=True, disabled=not ok, type="primary" if i == 0 else "secondary")
-        else:
-            st.caption("2주 안에서 충돌하지 않는 업무 시간을 찾지 못했어요.")
-        a, b, _ = st.columns([1.4, 1, 3])
-        a.button("원래 시간으로 등록", key="pe_orig", on_click=_decide_cb, args=("original",), use_container_width=True)
-        b.button("취소", key="pe_cancel", on_click=_decide_cb, args=("cancel",), use_container_width=True)
+            st.success("✅ 일정 충돌이 해소됐어요.")
+            st.write(event_description)
+            st.caption("원래 시간으로 등록할 수 있어요.")
+
+        st.divider()
+
+        a, b = st.columns([2, 1])
+
+        a.button(
+            (
+                "충돌을 감수하고 원래 시간으로 등록"
+                if conflicts
+                else "원래 시간으로 등록"
+            ),
+            key="pe_orig",
+            on_click=_decide_cb,
+            args=("original",),
+            use_container_width=True,
+            type="secondary" if conflicts else "primary",
+        )
+
+        b.button(
+            "취소",
+            key="pe_cancel",
+            on_click=_decide_cb,
+            args=("cancel",),
+            use_container_width=True,
+        )
+
 
 
 # ─────────────────────────────────────────────
@@ -2397,7 +2648,9 @@ def system_prompt():
         "- 메일을 보내 달라고 하면 메일을 쓰고 send_email까지 반드시 호출합니다. 보낼지 다시 묻지 않습니다.",
         "- send_email 결과가 success면 '메일을 보냈습니다'라고 받는 사람과 제목을 알려 줍니다.",
         "- needs_confirmation이면 아직 보내지 않은 것입니다. AI 확인에서 나온 확인할 점(issues)을 짧게 말하고",
-        "  '그래도 보낼까요?'라고 묻습니다. 김 대리가 '보내줘/그래도 보내'라고 하면 confirm_pending_email(send),",
+        "  '그래도 보낼까요?'라고 한 번만 묻습니다. 같은 답변 안에서 send_email을 다시 부르지 않습니다.",
+        "  김 대리가 '보내줘/그래도 보내'라고 하면 confirm_pending_email(send)로 바로 보냅니다(다시 확인하지 않음).",
+        "  내용을 고쳐 달라고 하면 고친 내용으로 send_email을 부르면 확인 없이 바로 발송됩니다.",
         "  '보내지 마/취소'라고 하면 confirm_pending_email(cancel)을 사용합니다.",
         "- failed면 이유를 알리고 필요한 정보를 묻습니다.",
         "- 도구를 사용한 뒤에는 무엇을 했는지 짧게 보고합니다.",
@@ -2490,15 +2743,47 @@ def save_turn(chat, turn):
     return chat
 
 
-def prepare_email(args, question, via="text"):
-    # send_email 도구: 받는 사람 확인 → AI 점검 → 문제가 없으면 발송
-    #   음성 요청은 AI 확인에서 문제가 없으면 바로 발송, 글 요청은 설정에 따라 김 대리 확인 후 발송
+def pending_mail_of(chat):
+    # 이 대화에서 '보내기 전 확인'을 이미 마치고 김 대리 대답을 기다리는 메일
+    for t in reversed(chat["turns"] if chat else []):
+        if t.get("mail") and t["mail"]["status"] == "pending":
+            return t["mail"], t
+    return None, None
+
+
+def prepare_email(args, question, via="text", chat=None, reviewed=None):
+    # send_email 도구: 받는 사람 확인 → AI 점검(메일 한 통에 딱 한 번) → 발송
+    #   · 음성 요청은 AI 확인에서 문제가 없으면 바로 발송, 글 요청은 설정에 따라 김 대리 확인 후 발송
+    #   · 이미 한 번 확인한 메일(이번 답변 안에서 다시 호출 / 확인 대기 중에 '보내줘')은 다시 확인하지 않음
     rcpt, err = resolve_recipient(args["to"])
     if err:
         return {"status": "failed", "error": err}, None, {"ok": False, "text": f"📧 메일 준비 실패 ({err})"}
-    ctx = f"[김 대리 요청]\n{question}\n\n[참고 자료]\n{brief_context()}"
-    rv = review_email(rcpt, args["subject"], args["body"], ctx)
     who = f"{rcpt['name']} <{rcpt['email']}>" if rcpt["name"] else rcpt["email"]
+
+    if reviewed is not None:
+        # 같은 답변 안에서 send_email을 또 부른 경우: 다시 확인하지 않고, 김 대리 대답을 기다리게 함
+        reviewed.update(to=rcpt["email"], name=rcpt["name"], subject=args["subject"], body=args["body"])
+        return ({"status": "needs_confirmation", "already_reviewed": True, "to": rcpt["email"],
+                 "message": "이 메일은 방금 확인을 마쳤습니다. 다시 확인하거나 send_email을 또 부르지 말고, "
+                            "확인할 점을 한 번만 말한 뒤 '그래도 보낼까요?'라고 물어보세요."}, None, None)
+
+    prior, prior_turn = pending_mail_of(chat)
+    if prior is not None and prior["to"].lower() == rcpt["email"].lower():
+        # 앞 답변에서 이미 확인을 마친 메일(같은 받는 사람): 김 대리가 보내라고 했으므로 다시 확인하지 않고 바로 발송
+        sr = send_email(rcpt["email"], args["subject"], args["body"])
+        if sr["status"] != "success":
+            return sr, None, {"ok": False, "text": f"📧 메일 발송 실패 ({sr['error']})"}
+        prior.update(status="sent", to=rcpt["email"], name=rcpt["name"], subject=args["subject"], body=args["body"])
+        save_data()
+        return ({"status": "success", "to": rcpt["email"], "subject": args["subject"],
+                 "note": "발송 전 확인은 앞에서 한 번 마쳤습니다."}, None,
+                {"ok": True, "text": f"📧 메일 발송 완료 → {who} · '{args['subject']}'"})
+
+    history = ""
+    if chat:
+        history = "\n".join(f"김 대리: {t['q']}\n에이블: {t['a'][:300]}" for t in chat["turns"][-4:])
+    ctx = (f"[김 대리 요청]\n{question}\n\n[이전 대화]\n{history or '(없음)'}\n\n[참고 자료]\n{brief_context()}")
+    rv = review_email(rcpt, args["subject"], args["body"], ctx)
     if rv["ok"] and (via == "voice" or not data["settings"].get("confirm_before_send", True)):
         sr = send_email(rcpt["email"], args["subject"], args["body"])
         if sr["status"] == "success":
@@ -2562,6 +2847,7 @@ def ask_assistant(chat, question, file_name="", file_text="", via="text"):
 
     client = get_client()
     actions, mail = [], None
+    sent_mail = None                     # 이번 답변에서 이미 보낸 메일 (같은 메일을 두 번 보내지 않게)
     asked_delete = False                 # 이번 답변에서 삭제 대상을 보여 줬으면 같은 답변에서는 삭제 금지
     for _ in range(5):  # 도구 호출은 최대 5회 반복
         resp = client.responses.create(model=MODEL, instructions=instructions, input=inputs, tools=TOOLS)
@@ -2571,9 +2857,20 @@ def ask_assistant(chat, question, file_name="", file_text="", via="text"):
         inputs += resp.output
         for c in calls:
             args = json.loads(c.arguments)
+            if c.name == "send_email" and sent_mail:
+                inputs.append({"type": "function_call_output", "call_id": c.call_id,
+                               "output": json.dumps({"status": "success", "already_sent": True, **sent_mail},
+                                                    ensure_ascii=False)})
+                continue
             if c.name == "send_email":
-                result, new_mail, act = prepare_email(args, question, via)
+                result, new_mail, act = prepare_email(args, question, via, chat, mail)
                 mail = new_mail or mail
+                if result.get("status") == "success":
+                    sent_mail = {"to": result["to"], "subject": args["subject"]}
+                if act is None:                  # 이미 확인한 메일을 다시 부른 경우: 화면에 확인 알림을 또 띄우지 않음
+                    inputs.append({"type": "function_call_output", "call_id": c.call_id,
+                                   "output": json.dumps(result, ensure_ascii=False)})
+                    continue
             elif c.name == "confirm_pending_email":
                 result, act = confirm_pending_mail(chat, args["action"], mail)
             elif c.name == "decide_pending_delete" and asked_delete and args["choice"] != "cancel":
