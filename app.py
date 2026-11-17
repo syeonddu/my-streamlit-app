@@ -18,7 +18,290 @@ from langchain_pymupdf4llm import PyMuPDF4LLMLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 
-st.title("AIVLE School 학습 도우미")
+# >>> AIVLE_UI_BEGIN
+
+st.set_page_config(
+    page_title="AIVLE School | 학습 도우미",
+    page_icon="📘",
+    layout="centered"
+)
+
+st.markdown("""
+<style>
+:root {
+    --mint: #19BEC9;
+    --deep: #087E87;
+    --ink: #233541;
+    --line: #DAEEEE;
+}
+
+/* 전체 배경과 콘텐츠 너비 */
+.stApp {
+    background: linear-gradient(
+        155deg,
+        #FFFFFF 0%,
+        #FBFEFE 58%,
+        #F4FCFC 100%
+    );
+    color: var(--ink);
+}
+
+[data-testid="stHeader"] {
+    background: transparent;
+}
+
+.block-container {
+    max-width: 850px !important;
+    padding-top: 1.7rem !important;
+    padding-bottom: 6rem !important;
+}
+
+/* 작고 읽기 편한 글자 */
+[data-testid="stMarkdownContainer"] p,
+[data-testid="stMarkdownContainer"] li {
+    font-size: .9rem;
+    line-height: 1.75;
+    color: var(--ink);
+}
+
+[data-testid="stMarkdownContainer"] h1 {
+    font-size: 1.4rem;
+}
+
+[data-testid="stMarkdownContainer"] h2 {
+    font-size: 1.2rem;
+}
+
+label,
+[data-testid="stWidgetLabel"] p {
+    font-size: .82rem !important;
+}
+
+/* 헤더 카드 */
+.aivle-hero {
+    background: #FFFFFF;
+    border: 1px solid var(--line);
+    border-radius: 20px;
+    padding: 20px 23px 18px;
+    margin-bottom: 1.15rem;
+    box-shadow:
+        0 9px 24px rgba(25,190,201,.06),
+        0 0 17px rgba(25,190,201,.06);
+}
+
+.aivle-brand {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    margin-bottom: 11px;
+}
+
+.aivle-mark {
+    display: grid;
+    place-items: center;
+    width: 24px;
+    height: 24px;
+    border: 1px solid #B7E6E9;
+    border-radius: 9px;
+    background: #EAFAFB;
+    color: var(--deep);
+    font-size: .76rem;
+    box-shadow: 0 0 11px rgba(25,190,201,.15);
+}
+
+.aivle-kicker {
+    font-size: .7rem;
+    font-weight: 700;
+    letter-spacing: .075em;
+    color: var(--deep);
+}
+
+.aivle-title {
+    font-size: 1.35rem;
+    font-weight: 700;
+    letter-spacing: -.04em;
+    margin-bottom: 5px;
+    color: #1D3440;
+}
+
+.aivle-desc {
+    font-size: .83rem;
+    line-height: 1.7;
+    color: #73858D;
+    margin: 0;
+}
+
+/* PDF 업로드 */
+[data-testid="stFileUploader"] {
+    background: #FFFFFF;
+    border: 1px solid var(--line);
+    border-radius: 17px;
+    padding: 13px 15px 8px;
+    margin-bottom: .6rem;
+}
+
+[data-testid="stFileUploaderDropzone"] {
+    background: #FCFEFE;
+    border: 1px dashed #B7E3E6;
+    border-radius: 13px;
+}
+
+[data-testid="stFileUploaderDropzone"] button {
+    font-size: .78rem !important;
+}
+
+/* 알림 */
+[data-testid="stAlert"] {
+    border-radius: 13px;
+}
+
+/* 채팅 카드 */
+[data-testid="stChatMessage"] {
+    background: #FFFFFF;
+    border: 1px solid #E3F0F1;
+    border-radius: 17px;
+    padding: .78rem .9rem;
+    margin-bottom: .72rem;
+    box-shadow: 0 5px 19px rgba(25,100,110,.035);
+}
+
+/* 사용자 채팅은 연한 민트 */
+[data-testid="stChatMessage"][aria-label*="user"],
+[data-testid="stChatMessage"][aria-label*="User"] {
+    background: #F1FBFB;
+    border-color: #CDECEF;
+}
+
+/* 작은 프로필 아이콘 */
+[data-testid="stChatMessageAvatarUser"],
+[data-testid="stChatMessageAvatarAssistant"] {
+    width: 28px !important;
+    height: 28px !important;
+    min-width: 28px !important;
+    min-height: 28px !important;
+    border-radius: 10px !important;
+}
+
+/* 채팅 입력창 */
+[data-testid="stChatInput"] {
+    background: #FFFFFF !important;
+    border: 1px solid #B6E4E7 !important;
+    border-radius: 16px !important;
+    box-shadow: 0 0 15px rgba(25,190,201,.1);
+}
+
+[data-testid="stChatInput"] textarea {
+    font-size: .87rem !important;
+}
+
+/* 답변 출처 */
+[data-testid="stExpander"] {
+    background: #FCFEFE;
+    border: 1px solid var(--line);
+    border-radius: 13px;
+    margin-top: .6rem;
+}
+
+[data-testid="stExpander"] summary {
+    font-size: .83rem !important;
+    color: var(--deep);
+}
+
+[data-testid="stCaptionContainer"] p {
+    font-size: .77rem !important;
+    color: #73858D !important;
+}
+
+/* 담당자 문의 폼 */
+[data-testid="stForm"] {
+    background: #FFFFFF;
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    padding: 15px 16px 8px;
+    margin-top: 8px;
+}
+
+[data-testid="stTextInput"] input,
+[data-testid="stTextArea"] textarea {
+    background: #FCFEFE;
+    border: 1px solid #D1E8EA;
+    border-radius: 12px;
+    font-size: .86rem;
+}
+
+/* 작고 둥근 버튼 */
+.stButton button,
+[data-testid="stFormSubmitButton"] button {
+    min-height: 34px;
+    border-radius: 11px;
+    padding: .32rem .83rem;
+    font-size: .8rem;
+    border: 1px solid #B7E4E7;
+    color: var(--deep);
+    background: #FFFFFF;
+    transition:
+        box-shadow .18s ease,
+        border-color .18s ease;
+}
+
+.stButton button:hover,
+[data-testid="stFormSubmitButton"] button:hover {
+    border-color: var(--mint);
+    box-shadow: 0 0 15px rgba(25,190,201,.19);
+}
+
+/* 중요 버튼 */
+.stButton button[kind="primary"],
+[data-testid="stFormSubmitButton"] button[kind="primary"] {
+    background: var(--deep);
+    color: #FFFFFF;
+    border-color: var(--deep);
+}
+
+button:disabled {
+    opacity: .52;
+    box-shadow: none !important;
+}
+
+/* 작은 화면 */
+@media (max-width:700px) {
+    .block-container {
+        padding: 1rem 1rem 5rem !important;
+    }
+
+    .aivle-hero {
+        padding: 16px 17px;
+    }
+
+    .aivle-title {
+        font-size: 1.2rem;
+    }
+}
+
+@media (prefers-reduced-motion:reduce) {
+    .stButton button {
+        transition: none;
+    }
+}
+</style>
+""", unsafe_allow_html=True)
+
+st.markdown("""
+<div class="aivle-hero">
+    <div class="aivle-brand">
+        <span class="aivle-mark">✦</span>
+        <span class="aivle-kicker">
+            AIVLE SCHOOL · DX TRACK
+        </span>
+    </div>
+    <div class="aivle-title">학습 도우미</div>
+    <p class="aivle-desc">
+        백서를 바탕으로 답하고, 근거를 확인해 드려요.
+    </p>
+</div>
+""", unsafe_allow_html=True)
+
+# <<< AIVLE_UI_END
 
 
 def setting(name):
