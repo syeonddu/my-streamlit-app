@@ -511,6 +511,97 @@ button[data-testid="stChatInputSubmitButton"] svg {
         max-width: 94% !important;
     }
 }
+
+/* AIVLE_CHAT_SPACING_BEGIN */
+
+/* 답변 카드와 질문 카드 공통 */
+[data-testid="stChatMessage"] {
+    box-sizing: border-box !important;
+    padding: 1.15rem 1.4rem !important;
+    margin-top: .75rem !important;
+    margin-bottom: 1.35rem !important;
+    margin-left: .75rem !important;
+    margin-right: .75rem !important;
+    border-radius: 20px !important;
+}
+
+/* 사용자 말풍선: 오른쪽 정렬 유지 */
+[class*="st-key-aivle_user_"]
+[data-testid="stChatMessage"] {
+    padding: .9rem 1.15rem !important;
+    margin-top: .8rem !important;
+    margin-bottom: 1.35rem !important;
+    margin-left: auto !important;
+    margin-right: .75rem !important;
+    max-width: 85% !important;
+}
+
+/* 답변 텍스트 문단 사이 간격 */
+[data-testid="stChatMessage"]
+[data-testid="stMarkdownContainer"] p {
+    margin-bottom: .65rem !important;
+}
+
+[data-testid="stChatMessage"]
+[data-testid="stMarkdownContainer"] p:last-child {
+    margin-bottom: 0 !important;
+}
+
+/* 목록 줄 간격 */
+[data-testid="stChatMessage"]
+[data-testid="stMarkdownContainer"] li {
+    padding-bottom: .2rem;
+}
+
+/* 답변 출처 카드 위아래 공간 */
+[data-testid="stChatMessage"]
+[data-testid="stExpander"] {
+    margin-top: 1rem !important;
+    margin-bottom: .75rem !important;
+}
+
+/* 담당자 문의 폼 */
+[data-testid="stChatMessage"]
+[data-testid="stForm"] {
+    margin-top: 1rem !important;
+    margin-bottom: .3rem !important;
+    padding: 1.15rem 1.25rem 1rem !important;
+}
+
+/* 입력란 사이의 여백 */
+[data-testid="stForm"]
+[data-testid="stTextArea"] {
+    margin-bottom: .8rem;
+}
+
+[data-testid="stForm"]
+[data-testid="stTextInput"] {
+    margin-bottom: .5rem;
+}
+
+/* 모바일 대응 */
+@media (max-width: 700px) {
+    [data-testid="stChatMessage"] {
+        padding: .9rem 1rem !important;
+        margin-left: .3rem !important;
+        margin-right: .3rem !important;
+    }
+
+    [class*="st-key-aivle_user_"]
+    [data-testid="stChatMessage"] {
+        padding: .8rem 1rem !important;
+        margin-left: auto !important;
+        margin-right: .3rem !important;
+        max-width: 95% !important;
+    }
+
+    [data-testid="stChatMessage"]
+    [data-testid="stForm"] {
+        padding: .9rem 1rem !important;
+    }
+}
+
+/* AIVLE_CHAT_SPACING_END */
 </style>
 """, unsafe_allow_html=True)
 # <<< AIVLE_FINE_UI_END
