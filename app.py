@@ -1,11 +1,10 @@
-# AIVLE School 학습 도우미: 교안 미션 3 기본 기능
-# 기존 확정 RAG 파이프라인은 아래에 원문 그대로 유지했습니다.
-# Google Colab에서 Streamlit 서버로 실행합니다.
 
 import os
 import hashlib
 import tempfile
 from pathlib import Path
+from operator import itemgetter
+
 import streamlit as st
 
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
@@ -14,63 +13,22 @@ from langchain_core.output_parsers import StrOutputParser
 from langchain_pymupdf4llm import PyMuPDF4LLMLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_chroma import Chroma
-from operator import itemgetter
 
+
+# ==========================================
+# 1. 문서 포맷팅
+# ==========================================
 
 def format_docs(docs):
-    return "\n\n".join(d.page_content for d in docs)
+    return "\n\n".join(doc.page_content for doc in docs)
 
 
-def rag_pipeline(filepath):
-    # 1. PDF 파일 읽기
-    loader = PyMuPDF4LLMLoader(str(filepath))
-    docs = loader.load()
+# ==========================================
+# 2. 프롬프트
+# ==========================================
 
-    # 비어 있는 문서 제외
-    docs = [
-        doc for doc in docs
-        if doc.page_content.strip()
-    ]
-
-    if not docs:
-        raise ValueError("PDF에서 읽을 수 있는 본문이 없습니다.")
-
-    print(f"1. PDF 읽기 완료: {len(docs)}개 Document")
-
-    # 2. 텍스트 분할
-    splitter = RecursiveCharacterTextSplitter(
-        chunk_size=1000,
-        chunk_overlap=200
-    )
-
-    chunks = splitter.split_documents(docs)
-
-    print(f"2. 문서 분할 완료: {len(chunks)}개 조각")
-
-    # 3. 임베딩 모델
-    embeddings = OpenAIEmbeddings(
-        model="text-embedding-3-small"
-    )
-
-    # 4. 벡터 저장소 구성
-    vectorstore = Chroma(
-        collection_name="aivle_docs",
-        embedding_function=embeddings
-    )
-
-    # 실습 재실행 시 같은 컬렉션에 문서가 중복 추가되지 않게 초기화
-    vectorstore.reset_collection()
-    vectorstore.add_documents(chunks)
-
-    print("3. 임베딩 및 벡터 저장 완료")
-
-    # 5. 검색기 구성
-    retriever = vectorstore.as_retriever(
-        search_kwargs={"k": 4}
-    )
-
-    # 6. 프롬프트 구성
-    prompt = ChatPromptTemplate.from_messages([
+def get_prompt():
+    return ChatPromptTemplate.from_messages([
         (
             "system",
             """당신은 AIVLE School DX 트랙 학습 도우미입니다.
@@ -78,7 +36,7 @@ def rag_pipeline(filepath):
 아래 [참고 문서]만 근거로 질문에 답하세요.
 
 답변 규칙:
-1. 질문에 직접 답하고, 필요한 경우 항목별로 설명하세요.
+1. 질문에 직접 답하고 필요한 경우 항목별로 설명하세요.
 2. 공식 안내, 개인 후기, 작성자의 학습 제안을 구분하세요.
 3. 문서에 근거가 없으면
    "백서에서 해당 내용을 확인할 수 없습니다."라고 말하세요.
@@ -93,112 +51,266 @@ def rag_pipeline(filepath):
         ("human", "{input}")
     ])
 
-    # 7. 답변 모델
+
+# ==========================================
+# 3. RAG 체인 생성
+# ==========================================
+
+def build_chain(vectorstore):
+    retriever = vectorstore.as_retriever(
+        search_kwargs={"k": 4}
+    )
+
     llm = ChatOpenAI(
         model="gpt-4o-mini",
         temperature=0
     )
 
-    # 8. RAG 체인 연결
     rag_chain = (
         {
             "context": itemgetter("input") | retriever | format_docs,
             "input": itemgetter("input")
         }
-        | prompt
+        | get_prompt()
         | llm
         | StrOutputParser()
     )
 
-    print("4. RAG 체인 구성 완료")
-
     return rag_chain
 
 
-# ===== Streamlit 기본 화면: 기능 연결만 구현, 별도 디자인 없음 =====
+# ==========================================
+# 4. 기존 ChromaDB 불러오기
+# ==========================================
+
+@st.cache_resource(show_spinner=False)
+def get_default_chain():
+
+    chroma_dir = Path(__file__).resolve().parent / "chroma_db"
+
+    if not chroma_dir.is_dir():
+        return None
+
+    embeddings = OpenAIEmbeddings(
+        model="text-embedding-3-small"
+    )
+
+    vectorstore = Chroma(
+        collection_name="aivle_docs",
+        embedding_function=embeddings,
+        persist_directory=str(chroma_dir)
+    )
+
+    if vectorstore._collection.count() == 0:
+        return None
+
+    return build_chain(vectorstore)
+
+
+# ==========================================
+# 5. 새 PDF로 RAG 파이프라인 생성
+# ==========================================
+
+def rag_pipeline(filepath):
+
+    # PDF 읽기
+    loader = PyMuPDF4LLMLoader(str(filepath))
+    docs = loader.load()
+
+    docs = [
+        doc for doc in docs
+        if doc.page_content.strip()
+    ]
+
+    if not docs:
+        raise ValueError("PDF에서 읽을 수 있는 내용이 없습니다.")
+
+    # 텍스트 분할
+    splitter = RecursiveCharacterTextSplitter(
+        chunk_size=1000,
+        chunk_overlap=200
+    )
+
+    chunks = splitter.split_documents(docs)
+
+    # 임베딩
+    embeddings = OpenAIEmbeddings(
+        model="text-embedding-3-small"
+    )
+
+    # 업로드한 PDF 전용 임시 벡터 저장소
+    vectorstore = Chroma(
+        collection_name="uploaded_aivle_docs",
+        embedding_function=embeddings
+    )
+
+    vectorstore.reset_collection()
+    vectorstore.add_documents(chunks)
+
+    return build_chain(vectorstore)
+
+
+# ==========================================
+# 6. Streamlit 화면
+# ==========================================
+
 st.title("AIVLE School 학습 도우미")
 
-# 코랩 실행 셀에서 OPENAI_API_KEY 환경변수를 설정합니다.
-try:
-    secret_api_key = st.secrets.get("OPENAI_API_KEY")
-except Exception:
-    secret_api_key = None
 
-if secret_api_key:
-    os.environ["OPENAI_API_KEY"] = secret_api_key
+# API 키 확인
+try:
+    secret_key = st.secrets.get("OPENAI_API_KEY")
+except Exception:
+    secret_key = None
+
+if secret_key:
+    os.environ["OPENAI_API_KEY"] = secret_key
 
 if not os.getenv("OPENAI_API_KEY"):
-    st.error("OPENAI_API_KEY가 설정되지 않았습니다. Streamlit Secrets 또는 환경변수를 확인해 주세요.")
+    st.error("OPENAI_API_KEY가 없습니다.")
     st.stop()
 
+
+# 세션 상태 초기화
 if "rag_chain" not in st.session_state:
     st.session_state.rag_chain = None
-if "pdf_hash" not in st.session_state:
-    st.session_state.pdf_hash = None
+
+if "active_source" not in st.session_state:
+    st.session_state.active_source = None
+
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-uploaded_pdf = st.file_uploader("AIVLE School 백서 PDF 업로드", type=["pdf"])
 
-if uploaded_pdf is None:
-    # 업로드를 취소했다면 이전 문서의 검색 결과는 사용하지 않습니다.
+# ==========================================
+# 7. PDF 업로드
+# ==========================================
+
+uploaded_pdf = st.file_uploader(
+    "AIVLE School 백서 PDF 업로드",
+    type=["pdf"]
+)
+
+pdf_bytes = (
+    uploaded_pdf.getvalue()
+    if uploaded_pdf is not None
+    else None
+)
+
+# 현재 사용하는 문서 구분
+source_id = (
+    "default"
+    if pdf_bytes is None
+    else "upload:" + hashlib.sha256(pdf_bytes).hexdigest()
+)
+
+# 문서가 바뀌면 대화 초기화
+if st.session_state.active_source != source_id:
+    st.session_state.active_source = source_id
     st.session_state.rag_chain = None
-    st.session_state.pdf_hash = None
     st.session_state.messages = []
-    st.info("백서 PDF를 업로드하면 자동으로 문서를 처리하고 질문할 수 있습니다.")
-else:
-    pdf_bytes = uploaded_pdf.getvalue()
-    current_hash = hashlib.sha256(pdf_bytes).hexdigest()
 
-    # 동일 PDF는 매번 재벡터화하지 않습니다.
-    # 다른 PDF를 업로드할 때만 기존 체인을 비우고 새 체인을 만듭니다.
-    if current_hash != st.session_state.pdf_hash:
-        st.session_state.rag_chain = None
-        st.session_state.pdf_hash = None
-        st.session_state.messages = []
 
-        if not pdf_bytes:
-            st.error("비어 있는 PDF 파일입니다. 다른 파일을 선택해 주세요.")
-            st.stop()
+# ==========================================
+# 8. 사용할 RAG 체인 준비
+# ==========================================
+
+if pdf_bytes is not None:
+
+    # 새로운 PDF가 업로드된 경우
+    if st.session_state.rag_chain is None:
 
         temp_path = None
+
         try:
-            with st.spinner("PDF를 읽고 RAG 파이프라인을 구성하고 있습니다..."):
-                # 확정 함수는 파일 객체가 아니라 PDF '경로'를 받습니다.
-                with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
-                    tmp.write(pdf_bytes)
-                    temp_path = tmp.name
-                chain = rag_pipeline(temp_path)
-                st.session_state.rag_chain = chain
-                st.session_state.pdf_hash = current_hash
-            st.success("PDF 분석 완료! 질문을 입력해 주세요.")
-        except Exception as exc:
-            st.error(f"PDF 처리 중 오류가 발생했습니다: {exc}")
-            st.stop()
+            with st.spinner("PDF를 분석하고 있습니다..."):
+
+                with tempfile.NamedTemporaryFile(
+                    suffix=".pdf",
+                    delete=False
+                ) as temp_pdf:
+
+                    temp_pdf.write(pdf_bytes)
+                    temp_path = temp_pdf.name
+
+                st.session_state.rag_chain = rag_pipeline(temp_path)
+
+            st.success("PDF 분석 완료! 질문해 주세요.")
+
+        except Exception as e:
+            st.error(f"PDF 분석 중 오류: {e}")
+
         finally:
-            if temp_path is not None:
+            if temp_path:
                 Path(temp_path).unlink(missing_ok=True)
 
-    # Streamlit은 입력마다 전체 스크립트를 재실행하므로 메시지 기록을 상태로 유지합니다.
-    for message in st.session_state.messages:
-        with st.chat_message(message["role"]):
-            st.write(message["content"])
+else:
 
-    question = st.chat_input(
-        "백서에 대해 질문해 주세요.",
-        disabled=st.session_state.rag_chain is None,
-    )
+    # PDF 업로드가 없으면 기존 chroma_db 사용
+    if st.session_state.rag_chain is None:
 
-    if question:
-        st.session_state.messages.append({"role": "user", "content": question})
-        with st.chat_message("user"):
-            st.write(question)
+        try:
+            st.session_state.rag_chain = get_default_chain()
 
-        with st.chat_message("assistant"):
-            try:
-                with st.spinner("답변을 생성하고 있습니다..."):
-                    answer = st.session_state.rag_chain.invoke({"input": question})
-                st.write(answer)
-                st.session_state.messages.append({"role": "assistant", "content": answer})
-            except Exception as exc:
-                st.error(f"답변 생성 중 오류가 발생했습니다: {exc}")
+        except Exception as e:
+            st.warning(f"벡터 저장소 불러오기 오류: {e}")
+
+    if st.session_state.rag_chain is None:
+        st.info(
+            "저장된 백서 데이터가 없습니다. "
+            "위에서 PDF를 업로드하면 질문할 수 있습니다."
+        )
+
+
+# ==========================================
+# 9. 기존 채팅 기록 표시
+# ==========================================
+
+for message in st.session_state.messages:
+
+    with st.chat_message(message["role"]):
+        st.write(message["content"])
+
+
+# ==========================================
+# 10. 채팅 입력창
+# ==========================================
+
+question = st.chat_input(
+    "백서에 대해 질문해 주세요.",
+    disabled=st.session_state.rag_chain is None
+)
+
+
+# ==========================================
+# 11. 질문 및 답변 처리
+# ==========================================
+
+if question and st.session_state.rag_chain is not None:
+
+    st.session_state.messages.append({
+        "role": "user",
+        "content": question
+    })
+
+    with st.chat_message("user"):
+        st.write(question)
+
+    with st.chat_message("assistant"):
+
+        try:
+            with st.spinner("답변을 생성하고 있습니다..."):
+
+                answer = st.session_state.rag_chain.invoke({
+                    "input": question
+                })
+
+            st.write(answer)
+
+            st.session_state.messages.append({
+                "role": "assistant",
+                "content": answer
+            })
+
+        except Exception as e:
+            st.error(f"답변 생성 중 오류: {e}")
