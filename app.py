@@ -1,6 +1,7 @@
 # AIVLE School 학습 도우미: RAG 검색 개선 + 출처 + 관리자 문의
 # 코랩의 '%%writefile /content/app.py' 다음 줄부터 이 코드 전체를 붙여 넣으세요.
 import hashlib
+import html
 import os
 import re
 import smtplib
@@ -19,724 +20,136 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 
 # >>> AIVLE_UI_BEGIN
-from pathlib import Path
-
-AIVLE_ASSISTANT_AVATAR = "/content/aivle_logo.png" if Path("/content/aivle_logo.png").exists() else ":material/school:"
-USER_AVATAR = ":material/person:"
+# 한 곳에서만 디자인을 관리합니다. 이전 CSS 패치 셀은 필요하지 않습니다.
+logo_file = Path(__file__).resolve().parent / "aivle_logo.png"
+AIVLE_ASSISTANT_AVATAR = str(logo_file) if logo_file.is_file() else ":material/school:"
 
 st.set_page_config(
-    page_title="AIVLE School | 학습 도우미",
-    page_icon="📘",
-    layout="centered"
+    page_title="AIVLE School | 학습 도우미", page_icon="📘", layout="centered"
 )
-
 st.markdown("""
 <style>
 :root {
-    --mint: #19BEC9;
-    --mint-soft: #ECFCFC;
-    --mint-line: #CDEEEF;
-    --mint-glow: rgba(25,190,201,0.18);
-    --deep: #17313A;
-    --text: #24343C;
-    --sub: #6D7F86;
-    --card: #FFFFFF;
-    --bg: #F8FCFC;
+  --mint: #19BEC9; --mint-deep: #087E87; --ink: #253943;
+  --line: #D8ECEE; --soft: #EAF9F9;
 }
-
-/* 전체 */
-.stApp {
-    background: linear-gradient(180deg, #FCFEFE 0%, #F7FBFB 100%);
-    color: var(--text);
-}
-
-[data-testid="stHeader"] {
-    background: transparent;
-}
-
-.block-container {
-    max-width: 640px !important;   /* 기존보다 좁게 */
-    padding-top: 1.2rem !important;
-    padding-bottom: 5.5rem !important;
-}
-
-/* 전반 텍스트 축소 */
-html, body, [class*="css"] {
-    font-size: 14px !important;
-}
-
+.stApp {background: linear-gradient(155deg,#FFFFFF 0%,#FBFEFE 55%,#F7FCFC 100%); color:var(--ink);}
+[data-testid="stHeader"] {background:transparent;}
+.block-container {max-width:640px!important;padding:1.4rem 1rem 6rem!important;}
+/* 작고 편안한 타이포그래피 */
 [data-testid="stMarkdownContainer"] p,
-[data-testid="stMarkdownContainer"] li,
-label,
-.stTextInput label,
-.stTextArea label {
-    font-size: 0.84rem !important;
-    line-height: 1.72 !important;
-    color: var(--text);
-}
-
-[data-testid="stMarkdownContainer"] h1 {
-    font-size: 1.05rem !important;
-}
-
-[data-testid="stMarkdownContainer"] h2 {
-    font-size: 0.98rem !important;
-}
-
-[data-testid="stCaptionContainer"] p {
-    font-size: 0.74rem !important;
-    color: var(--sub) !important;
-}
-
+[data-testid="stMarkdownContainer"] li {font-size:.81rem!important;line-height:1.77!important;letter-spacing:-.005em;color:var(--ink);}
+[data-testid="stMarkdownContainer"] ul,
+[data-testid="stMarkdownContainer"] ol {padding-left:1.25rem;margin:.5rem 0 .8rem;}
+[data-testid="stMarkdownContainer"] li {margin-bottom:.25rem;}
+[data-testid="stWidgetLabel"] p,label {font-size:.78rem!important;}
+[data-testid="stCaptionContainer"] p {font-size:.72rem!important;color:#758991!important;}
 /* 헤더 */
-.aivle-hero {
-    background: rgba(255,255,255,0.88);
-    border: 1px solid rgba(25,190,201,0.12);
-    border-radius: 22px;
-    padding: 18px 20px 16px;
-    margin-bottom: 1rem;
-    box-shadow:
-        0 8px 24px rgba(25,190,201,0.05),
-        0 0 18px rgba(25,190,201,0.05);
+.aivle-hero {background:#fff;border:1px solid var(--line);border-radius:21px;
+ padding:18px 20px 17px;margin-bottom:1rem;
+ box-shadow:0 8px 25px rgba(25,190,201,.055),0 0 14px rgba(25,190,201,.035);}
+.aivle-brand {display:flex;align-items:center;gap:9px;margin-bottom:10px;}
+.aivle-mark {display:grid;place-items:center;width:22px;height:22px;background:#EDFAFB;
+ border:1px solid #B7E5E8;border-radius:8px;color:var(--mint-deep);font-size:.7rem;}
+.aivle-kicker {font-size:.68rem;font-weight:700;letter-spacing:.07em;color:var(--mint-deep);}
+.aivle-title {font-size:1.07rem;font-weight:700;color:#17323C;letter-spacing:-.03em;margin:0 0 5px;}
+.aivle-desc {font-size:.78rem;line-height:1.65;color:#74878D;margin:0;}
+/* PDF 업로더 */
+[data-testid="stFileUploader"] {background:#fff;border:1px solid var(--line);border-radius:18px;
+ padding:12px 14px 10px;margin-bottom:.65rem;}
+[data-testid="stFileUploaderDropzone"] {background:#FCFEFE;border:1px dashed #B6E7EA;border-radius:14px;min-height:64px;}
+[data-testid="stFileUploaderDropzone"] button {font-size:.75rem!important;min-height:29px!important;}
+[data-testid="stFileUploader"] small,
+[data-testid="stFileUploader"] [data-testid="stFileUploaderFileName"] {font-size:.73rem!important;line-height:1.65!important;}
+[data-testid="stFileUploader"] [data-testid="stFileUploaderFile"] {padding:.28rem .38rem!important;}
+[data-testid="stAlert"] {border-radius:13px;}
+/* 사용자 질문: Streamlit 기본 메시지 내부 여백에 의존하지 않는 독립 말풍선 */
+.aivle-user-row {display:flex;justify-content:flex-end;margin:.45rem .65rem 1.1rem;}
+.aivle-user-bubble {box-sizing:border-box;display:inline-flex;flex-direction:row;align-items:center;
+ gap:.65rem;width:fit-content;max-width:88%;min-height:43px;
+ padding:.58rem .76rem .58rem .92rem;background:var(--soft);
+ border:1px solid #C5EAEC;border-radius:18px;
+ box-shadow:0 4px 14px rgba(25,190,201,.04);}
+.aivle-user-text {display:block;min-width:0;white-space:pre-wrap;overflow-wrap:anywhere;
+ font-size:.81rem;line-height:1.55;color:var(--ink);text-align:left;}
+.aivle-user-icon {box-sizing:border-box;display:flex;justify-content:center;align-items:center;
+ width:24px;height:24px;flex:0 0 24px;border:1px solid #B3E3E6;
+ border-radius:9px;background:#F7FEFE;color:var(--mint-deep);}
+.aivle-user-icon svg {display:block;width:14px;height:14px;stroke:currentColor;}
+/* 챗봇 답변만 Streamlit 카드 사용: 위 여백을 별도로 충분히 확보 */
+[data-testid="stChatMessage"] {box-sizing:border-box;background:#fff!important;
+ border:1px solid #E0EFF0!important;border-radius:20px!important;
+ padding:1.45rem 1.45rem 1.2rem!important;margin:.2rem .65rem 1.3rem!important;
+ box-shadow:0 6px 18px rgba(25,100,110,.04);align-items:flex-start!important;}
+[data-testid="stChatMessage"] [data-testid="stChatMessageContent"] {min-width:0;padding-top:.12rem!important;}
+[data-testid="stChatMessage"] [data-testid="stMarkdownContainer"] p {margin-top:0!important;margin-bottom:.75rem!important;}
+[data-testid="stChatMessage"] [data-testid="stMarkdownContainer"] p:last-child {margin-bottom:0!important;}
+[data-testid="stChatMessage"] [data-testid="stMarkdownContainer"] li {margin-bottom:.28rem!important;}
+/* 챗봇 프로필 */
+[data-testid="stChatMessage"] [data-testid^="stChatMessageAvatar"] {background:#EFFBFB!important;
+ border:1px solid #BDE7E9!important;border-radius:10px!important;color:#0A9DA8!important;
+ width:29px!important;height:29px!important;min-width:29px!important;min-height:29px!important;
+ box-shadow:0 0 11px rgba(25,190,201,.09)!important;overflow:hidden;}
+[data-testid="stChatMessage"] [data-testid^="stChatMessageAvatar"] svg {color:#0A9DA8!important;
+ width:17px!important;height:17px!important;}
+[data-testid="stChatMessage"] [data-testid^="stChatMessageAvatar"] img {object-fit:contain!important;}
+/* 답변 출처 */
+[data-testid="stExpander"] {background:#FCFEFE!important;border:1px solid #D7EBED!important;
+ border-radius:13px!important;overflow:hidden;margin-top:1rem!important;margin-bottom:.65rem!important;}
+[data-testid="stExpander"] summary {font-size:.76rem!important;color:var(--mint-deep)!important;
+ font-weight:600!important;padding:.42rem .68rem!important;}
+[data-testid="stExpander"] [data-testid="stExpanderDetails"] {padding:.55rem .78rem .75rem!important;}
+[data-testid="stExpander"] [data-testid="stText"] {font-size:.72rem!important;line-height:1.65!important;
+ white-space:pre-wrap!important;overflow-wrap:anywhere!important;color:#587178!important;}
+/* 문의 폼 */
+[data-testid="stForm"] {background:#fff;border:1px solid var(--line);border-radius:16px;
+ padding:1.1rem 1.18rem .9rem!important;margin-top:1rem!important;}
+[data-testid="stTextInput"] input,[data-testid="stTextArea"] textarea {background:#FCFEFE!important;
+ border:1px solid #D0E8EA!important;border-radius:11px!important;font-size:.79rem!important;line-height:1.6!important;}
+.stButton button,[data-testid="stFormSubmitButton"] button {min-height:32px!important;border-radius:10px!important;
+ padding:.29rem .75rem!important;font-size:.76rem!important;color:var(--mint-deep)!important;
+ background:#fff!important;border:1px solid #BCE5E7!important;transition:box-shadow .16s ease,border-color .16s ease;}
+.stButton button:hover,[data-testid="stFormSubmitButton"] button:hover {border-color:var(--mint)!important;
+ box-shadow:0 0 12px rgba(25,190,201,.15)!important;}
+[data-testid="stFormSubmitButton"] button[kind="primary"] {background:var(--mint)!important;
+ border-color:var(--mint)!important;color:#fff!important;}
+/* 채팅 입력, 전송 버튼: 빨간 기본값 덮기 */
+[data-testid="stChatInput"] {background:#fff!important;border:1px solid #B3E6E9!important;border-radius:18px!important;
+ box-shadow:0 0 19px rgba(25,190,201,.12)!important;}
+[data-testid="stChatInput"]:focus-within {border-color:var(--mint)!important;
+ box-shadow:0 0 0 1px rgba(25,190,201,.12),0 0 21px rgba(25,190,201,.18)!important;}
+[data-testid="stChatInput"] > div {border-color:transparent!important;background:transparent!important;
+ box-shadow:none!important;border-radius:18px!important;}
+[data-testid="stChatInput"] textarea {font-size:.81rem!important;color:var(--ink)!important;
+ outline:none!important;box-shadow:none!important;line-height:1.6!important;}
+[data-testid="stChatInput"] textarea:focus-visible {outline:none!important;box-shadow:none!important;}
+button[data-testid="stChatInputSubmitButton"]:not(:disabled) {background:var(--mint)!important;
+ border:1px solid var(--mint)!important;border-radius:11px!important;color:white!important;
+ box-shadow:0 0 15px rgba(25,190,201,.23)!important;}
+button[data-testid="stChatInputSubmitButton"]:not(:disabled):hover {background:#0AAAB5!important;
+ border-color:#0AAAB5!important;box-shadow:0 0 19px rgba(25,190,201,.29)!important;}
+button[data-testid="stChatInputSubmitButton"] svg {color:inherit!important;}
+button[data-testid="stChatInputSubmitButton"]:disabled {background:#EAF3F4!important;
+ border:1px solid #DAEBEC!important;color:#A5B8BD!important;}
+@media(max-width:700px) {
+ .block-container {max-width:100%!important;padding:1rem .85rem 5rem!important;}
+ .aivle-hero {padding:15px 16px;}
+ .aivle-user-row {margin-right:.2rem;}
+ .aivle-user-bubble {max-width:94%;gap:.55rem;padding:.56rem .68rem .56rem .78rem;}
+ [data-testid="stChatMessage"] {margin-right:.2rem!important;margin-left:.2rem!important;padding:1.15rem 1.05rem 1rem!important;}
 }
-
-.aivle-brand-row {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    margin-bottom: 10px;
-}
-
-.aivle-badge {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    border: 1px solid rgba(25,190,201,0.16);
-    border-radius: 999px;
-    background: rgba(25,190,201,0.05);
-    padding: 6px 10px;
-    font-size: 0.72rem;
-    font-weight: 700;
-    letter-spacing: 0.08em;
-    color: #118B94;
-}
-
-.aivle-badge-dot {
-    width: 14px;
-    height: 14px;
-    border-radius: 8px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    background: #FFFFFF;
-    border: 1px solid rgba(25,190,201,0.18);
-    box-shadow: 0 0 10px rgba(25,190,201,0.18);
-    font-size: 0.56rem;
-}
-
-.aivle-title {
-    font-size: 0.82rem;
-    font-weight: 800;
-    letter-spacing: -0.02em;
-    color: var(--deep);
-    margin: 0 0 3px 0;
-}
-
-.aivle-sub {
-    font-size: 0.76rem;
-    color: var(--sub);
-    margin: 0;
-    line-height: 1.65;
-}
-
-/* 업로더 */
-[data-testid="stFileUploader"] {
-    background: rgba(255,255,255,0.90);
-    border: 1px solid rgba(25,190,201,0.12);
-    border-radius: 20px;
-    padding: 12px 14px 8px;
-    box-shadow:
-        0 6px 18px rgba(25,190,201,0.04);
-}
-
-[data-testid="stFileUploaderDropzone"] {
-    background: #FCFEFE;
-    border: 1px dashed rgba(25,190,201,0.20);
-    border-radius: 16px;
-}
-
-/* 채팅 메시지 공통 */
-[data-testid="stChatMessage"] {
-    background: rgba(255,255,255,0.92);
-    border: 1px solid #E2F0F1;
-    border-radius: 20px;
-    padding: 0.75rem 0.85rem;
-    margin-bottom: 0.75rem;
-    box-shadow: 0 6px 18px rgba(25,190,201,0.03);
-}
-
-/* 아바타 박스 */
-[data-testid="stChatMessageAvatarUser"],
-[data-testid="stChatMessageAvatarAssistant"] {
-    width: 30px !important;
-    height: 30px !important;
-    min-width: 30px !important;
-    min-height: 30px !important;
-    border-radius: 12px !important;
-    overflow: hidden !important;
-    border: 1px solid rgba(25,190,201,0.14);
-    background: linear-gradient(180deg, #FFFFFF 0%, #F5FEFE 100%);
-    box-shadow: 0 0 14px rgba(25,190,201,0.10);
-}
-
-/* 사용자 메시지 - 오른쪽 */
-[data-testid="stChatMessage"][aria-label*="user"],
-[data-testid="stChatMessage"][aria-label*="User"] {
-    flex-direction: row-reverse;
-    background: var(--mint-soft);
-    border: 1px solid var(--mint-line);
-    margin-left: 56px;
-}
-
-[data-testid="stChatMessage"][aria-label*="user"] [data-testid="stChatMessageContent"],
-[data-testid="stChatMessage"][aria-label*="User"] [data-testid="stChatMessageContent"] {
-    text-align: left;
-}
-
-/* 챗봇 메시지 - 왼쪽 */
-[data-testid="stChatMessage"][aria-label*="assistant"],
-[data-testid="stChatMessage"][aria-label*="Assistant"] {
-    margin-right: 56px;
-}
-
-/* expander */
-[data-testid="stExpander"] {
-    background: rgba(255,255,255,0.88);
-    border: 1px solid rgba(25,190,201,0.12);
-    border-radius: 16px;
-    margin-top: 0.55rem;
-}
-
-[data-testid="stExpander"] summary {
-    font-size: 0.82rem !important;
-    color: #118B94 !important;
-    font-weight: 600 !important;
-}
-
-/* 폼 */
-[data-testid="stForm"] {
-    background: rgba(255,255,255,0.92);
-    border: 1px solid rgba(25,190,201,0.12);
-    border-radius: 18px;
-    padding: 14px 14px 8px;
-    margin-top: 8px;
-    box-shadow: 0 6px 18px rgba(25,190,201,0.04);
-}
-
-/* 텍스트 입력 / 텍스트영역 */
-[data-testid="stTextInput"] input,
-[data-testid="stTextArea"] textarea {
-    background: #FCFEFE !important;
-    border: 1px solid rgba(25,190,201,0.16) !important;
-    border-radius: 14px !important;
-    color: var(--text) !important;
-    font-size: 0.82rem !important;
-    box-shadow: none !important;
-}
-
-[data-testid="stTextInput"] input:focus,
-[data-testid="stTextArea"] textarea:focus {
-    border: 1px solid rgba(25,190,201,0.34) !important;
-    box-shadow:
-        0 0 0 1px rgba(25,190,201,0.08),
-        0 0 14px rgba(25,190,201,0.10) !important;
-}
-
-/* 하단 채팅 입력창 */
-[data-testid="stChatInput"] {
-    background: rgba(255,255,255,0.96) !important;
-    border: 1px solid rgba(25,190,201,0.24) !important;
-    border-radius: 18px !important;
-    box-shadow:
-        0 0 0 1px rgba(25,190,201,0.06),
-        0 0 22px rgba(25,190,201,0.14) !important;
-}
-
-[data-testid="stChatInput"] > div {
-    border: none !important;
-    box-shadow: none !important;
-    border-radius: 18px !important;
-    background: transparent !important;
-}
-
-[data-testid="stChatInput"] textarea {
-    font-size: 0.84rem !important;
-    color: var(--text) !important;
-}
-
-[data-testid="stChatInput"] textarea::placeholder {
-    color: #8798A0 !important;
-}
-
-/* 빨간 outline 죽이기 */
-textarea:focus, input:focus, button:focus {
-    outline: none !important;
-    box-shadow:
-        0 0 0 1px rgba(25,190,201,0.08),
-        0 0 14px rgba(25,190,201,0.12) !important;
-}
-
-/* 버튼 */
-.stButton button,
-[data-testid="stFormSubmitButton"] button {
-    min-height: 34px;
-    border-radius: 12px;
-    padding: .32rem .78rem;
-    font-size: 0.79rem;
-    font-weight: 600;
-    background: #FFFFFF;
-    color: #118B94;
-    border: 1px solid rgba(25,190,201,0.16);
-    box-shadow: 0 4px 12px rgba(25,190,201,0.05);
-}
-
-.stButton button:hover,
-[data-testid="stFormSubmitButton"] button:hover {
-    border-color: rgba(25,190,201,0.34);
-    box-shadow:
-        0 0 14px rgba(25,190,201,0.12),
-        0 4px 14px rgba(25,190,201,0.07);
-}
-
-[data-testid="stFormSubmitButton"] button[kind="primary"] {
-    background: linear-gradient(180deg, #19BEC9 0%, #14AEB8 100%);
-    color: white;
-    border: 1px solid rgba(25,190,201,0.20);
-}
-
-/* 모바일 */
-@media (max-width: 760px) {
-    .block-container {
-        max-width: 100% !important;
-        padding-left: 0.9rem !important;
-        padding-right: 0.9rem !important;
-    }
-
-    [data-testid="stChatMessage"][aria-label*="user"],
-    [data-testid="stChatMessage"][aria-label*="User"] {
-        margin-left: 18px;
-    }
-
-    [data-testid="stChatMessage"][aria-label*="assistant"],
-    [data-testid="stChatMessage"][aria-label*="Assistant"] {
-        margin-right: 18px;
-    }
-}
+@media(prefers-reduced-motion:reduce) {.stButton button {transition:none!important;}}
 </style>
 """, unsafe_allow_html=True)
-
 st.markdown("""
 <div class="aivle-hero">
-    <div class="aivle-brand-row">
-        <div class="aivle-badge">
-            <span class="aivle-badge-dot">✦</span>
-            AIVLE SCHOOL · DX TRACK
-        </div>
-    </div>
-    <div class="aivle-title">학습 도우미</div>
-    <p class="aivle-sub">백서를 바탕으로 답하고, 근거를 확인해 드려요.</p>
+  <div class="aivle-brand"><span class="aivle-mark">✦</span>
+    <span class="aivle-kicker">AIVLE SCHOOL · DX TRACK</span></div>
+  <div class="aivle-title">학습 도우미</div>
+  <p class="aivle-desc">백서를 바탕으로 답하고, 근거를 확인해 드려요.</p>
 </div>
 """, unsafe_allow_html=True)
 # <<< AIVLE_UI_END
-# >>> AIVLE_FINE_UI_BEGIN
-from io import BytesIO as _AivleBuffer
-import base64 as _AivleB64
-AIVLE_ASSISTANT_AVATAR = _AivleBuffer(_AivleB64.b64decode('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'))
-AIVLE_USER_AVATAR = ":material/person_outline:"
-
-st.markdown("""
-<style>
-:root {
-    --mint: #19BEC9;
-    --mint-dark: #0AAAB5;
-}
-
-/* 전송 버튼: 빨간색에서 민트색으로 */
-button[data-testid="stChatInputSubmitButton"]:not(:disabled) {
-    background: #19BEC9 !important;
-    border: 1px solid #19BEC9 !important;
-    color: white !important;
-    border-radius: 11px !important;
-    box-shadow: 0 0 15px rgba(25,190,201,.24) !important;
-}
-
-button[data-testid="stChatInputSubmitButton"]:not(:disabled):hover {
-    background: #0AAAB5 !important;
-    box-shadow: 0 0 19px rgba(25,190,201,.31) !important;
-}
-
-button[data-testid="stChatInputSubmitButton"]:disabled {
-    background: #E9F4F5 !important;
-    color: #A1B6BA !important;
-    border: 0 !important;
-}
-
-button[data-testid="stChatInputSubmitButton"] svg {
-    color: inherit !important;
-}
-
-/* 채팅 입력창 민트 글로우 */
-[data-testid="stChatInput"]:focus-within {
-    border-color: #19BEC9 !important;
-    box-shadow:
-        0 0 0 1px rgba(25,190,201,.11),
-        0 0 22px rgba(25,190,201,.20) !important;
-}
-
-[data-testid="stChatInput"] textarea:focus-visible {
-    outline: none !important;
-    box-shadow: none !important;
-}
-
-/* 사용자 메시지: 오른쪽 + 연한 민트 */
-[class*="st-key-aivle_user_"] [data-testid="stChatMessage"] {
-    background: #EAF9F9 !important;
-    border: 1px solid #C6EBEC !important;
-    flex-direction: row-reverse !important;
-    width: fit-content !important;
-    max-width: 87% !important;
-    margin-left: auto !important;
-    margin-right: 0 !important;
-    padding: .66rem .82rem !important;
-    box-shadow: 0 3px 12px rgba(25,190,201,.055) !important;
-}
-
-[class*="st-key-aivle_user_"] [data-testid="stChatMessageContent"] {
-    text-align: left !important;
-}
-
-/* 프로필 아이콘 */
-[data-testid="stChatMessage"] [data-testid^="stChatMessageAvatar"] {
-    background: #EFFBFB !important;
-    color: #0A9DA8 !important;
-    border: 1px solid #BDE7E9 !important;
-    border-radius: 10px !important;
-    width: 29px !important;
-    height: 29px !important;
-    min-width: 29px !important;
-    min-height: 29px !important;
-}
-
-[data-testid="stChatMessage"] [data-testid^="stChatMessageAvatar"] svg {
-    color: #0A9DA8 !important;
-    fill: currentColor !important;
-    width: 17px !important;
-    height: 17px !important;
-}
-
-[data-testid="stChatMessage"] [data-testid^="stChatMessageAvatar"] img {
-    object-fit: contain !important;
-}
-
-/* 작은 본문 글씨 + 편안한 행간 */
-[data-testid="stMarkdownContainer"] p,
-[data-testid="stMarkdownContainer"] li {
-    font-size: .81rem !important;
-    line-height: 1.73 !important;
-    letter-spacing: -.01em;
-}
-
-[data-testid="stMarkdownContainer"] li {
-    margin-bottom: .22rem;
-}
-
-/* 버튼 크기 정리 */
-.stButton button,
-[data-testid="stFormSubmitButton"] button {
-    min-height: 31px !important;
-    font-size: .75rem !important;
-    padding: .29rem .74rem !important;
-    border-radius: 10px !important;
-}
-
-/* 답변 출처 카드 */
-[data-testid="stExpander"] {
-    background: #FCFEFE !important;
-    border: 1px solid #D8ECEE !important;
-    border-radius: 13px !important;
-    overflow: hidden;
-}
-
-[data-testid="stExpander"] summary {
-    font-size: .76rem !important;
-    color: #087E87 !important;
-    padding: .42rem .65rem !important;
-}
-
-[data-testid="stExpander"] [data-testid="stExpanderDetails"] {
-    padding: .5rem .75rem .7rem !important;
-}
-
-[data-testid="stExpander"] [data-testid="stText"] {
-    font-size: .72rem !important;
-    line-height: 1.65 !important;
-    white-space: pre-wrap !important;
-    overflow-wrap: anywhere !important;
-    color: #587178 !important;
-}
-
-/* PDF 업로더 */
-[data-testid="stFileUploader"] {
-    padding: 11px 13px 9px !important;
-}
-
-[data-testid="stFileUploaderDropzone"] {
-    min-height: 64px;
-    border-radius: 14px !important;
-}
-
-[data-testid="stFileUploader"] small {
-    font-size: .74rem !important;
-    line-height: 1.6 !important;
-}
-
-[data-testid="stFileUploaderDropzone"] button {
-    font-size: .75rem !important;
-    min-height: 28px !important;
-}
-
-/* 작은 화면 */
-@media (max-width:700px) {
-    [class*="st-key-aivle_user_"] [data-testid="stChatMessage"] {
-        max-width: 94% !important;
-    }
-}
-
-
-/* AIVLE_CHAT_SPACING_BEGIN */
-
-/* 공통 채팅 카드 */
-[data-testid="stChatMessage"] {
-    box-sizing: border-box !important;
-    border-radius: 20px !important;
-    margin-top: .9rem !important;
-    margin-bottom: 1.25rem !important;
-    margin-left: .75rem !important;
-    margin-right: .75rem !important;
-    display: flex !important;
-    align-items: flex-start !important;
-    gap: .72rem !important;
-}
-
-/* 챗봇 답변 카드 */
-[data-testid="stChatMessage"]:not([class*="st-key-aivle_user_"]) {
-    padding: 1.35rem 1.45rem 1.15rem 1.45rem !important;
-}
-
-/* 사용자 카드 */
-[class*="st-key-aivle_user_"] [data-testid="stChatMessage"] {
-    padding: .78rem 1rem !important;
-    margin-top: .65rem !important;
-    margin-bottom: 1.2rem !important;
-    margin-left: auto !important;
-    margin-right: .75rem !important;
-    max-width: 84% !important;
-    width: fit-content !important;
-    display: flex !important;
-    align-items: center !important;   /* 핵심: 세로 중앙 정렬 */
-    gap: .55rem !important;
-}
-
-/* 사용자 메시지 본문 중앙 정렬 보정 */
-[class*="st-key-aivle_user_"] [data-testid="stChatMessageContent"] {
-    display: flex !important;
-    align-items: center !important;
-    min-height: 100% !important;
-}
-
-[class*="st-key-aivle_user_"] [data-testid="stMarkdownContainer"] p {
-    margin: 0 !important;
-    line-height: 1.5 !important;
-}
-
-/* 사용자 아바타 크기 축소 */
-[class*="st-key-aivle_user_"] [data-testid^="stChatMessageAvatar"] {
-    width: 24px !important;
-    height: 24px !important;
-    min-width: 24px !important;
-    min-height: 24px !important;
-    border-radius: 8px !important;
-    display: flex !important;
-    align-items: center !important;
-    justify-content: center !important;
-}
-
-[class*="st-key-aivle_user_"] [data-testid^="stChatMessageAvatar"] svg {
-    width: 14px !important;
-    height: 14px !important;
-}
-
-/* 챗봇 아바타는 너무 작지 않게 */
-[data-testid="stChatMessage"]:not([class*="st-key-aivle_user_"]) [data-testid^="stChatMessageAvatar"] {
-    margin-top: .1rem !important;
-}
-
-/* 답변 텍스트 상단 숨쉴공간 */
-[data-testid="stChatMessage"] [data-testid="stMarkdownContainer"] {
-    padding-top: .1rem !important;
-}
-
-[data-testid="stChatMessage"] [data-testid="stMarkdownContainer"] p {
-    margin-bottom: .72rem !important;
-}
-
-[data-testid="stChatMessage"] [data-testid="stMarkdownContainer"] p:first-child {
-    margin-top: 0 !important;
-}
-
-[data-testid="stChatMessage"] [data-testid="stMarkdownContainer"] p:last-child {
-    margin-bottom: 0 !important;
-}
-
-/* 목록 간격 */
-[data-testid="stChatMessage"] [data-testid="stMarkdownContainer"] ul,
-[data-testid="stChatMessage"] [data-testid="stMarkdownContainer"] ol {
-    margin-top: .5rem !important;
-    margin-bottom: .75rem !important;
-    padding-left: 1.2rem !important;
-}
-
-[data-testid="stChatMessage"] [data-testid="stMarkdownContainer"] li {
-    margin-bottom: .28rem !important;
-    line-height: 1.72 !important;
-}
-
-/* 답변 출처 카드 */
-[data-testid="stChatMessage"] [data-testid="stExpander"] {
-    margin-top: 1rem !important;
-    margin-bottom: .45rem !important;
-}
-
-/* 문의 폼 */
-[data-testid="stChatMessage"] [data-testid="stForm"] {
-    margin-top: 1rem !important;
-    margin-bottom: .25rem !important;
-    padding: 1.1rem 1.2rem 1rem !important;
-}
-
-/* 모바일 */
-@media (max-width: 700px) {
-    [data-testid="stChatMessage"] {
-        margin-left: .35rem !important;
-        margin-right: .35rem !important;
-    }
-
-    [data-testid="stChatMessage"]:not([class*="st-key-aivle_user_"]) {
-        padding: 1.1rem 1rem 1rem 1rem !important;
-    }
-
-    [class*="st-key-aivle_user_"] [data-testid="stChatMessage"] {
-        padding: .7rem .9rem !important;
-        max-width: 94% !important;
-        margin-right: .35rem !important;
-    }
-
-    [class*="st-key-aivle_user_"] [data-testid^="stChatMessageAvatar"] {
-        width: 22px !important;
-        height: 22px !important;
-        min-width: 22px !important;
-        min-height: 22px !important;
-    }
-
-    [class*="st-key-aivle_user_"] [data-testid^="stChatMessageAvatar"] svg {
-        width: 13px !important;
-        height: 13px !important;
-    }
-}
-
-/* AIVLE_CHAT_SPACING_END */
-
-
-/* AIVLE_USER_COMPACT_BEGIN */
-
-/* 사용자 메시지 위쪽 불필요한 간격 줄이기 */
-[class*="st-key-aivle_user_"] {
-    margin-top: 0 !important;
-    margin-bottom: .65rem !important;
-}
-
-/* 사용자 말풍선 크기와 패딩 */
-[class*="st-key-aivle_user_"]
-[data-testid="stChatMessage"] {
-    display: flex !important;
-    flex-direction: row-reverse !important;
-    align-items: center !important;
-
-    width: fit-content !important;
-    max-width: 87% !important;
-    min-height: 0 !important;
-
-    padding: .32rem .65rem !important;
-    margin: 0 0 .65rem auto !important;
-    gap: .45rem !important;
-
-    background: #EAF9F9 !important;
-    border: 1px solid #C6EBEC !important;
-    border-radius: 16px !important;
-}
-
-/* 내부 요소의 높이와 기본 여백 제거 */
-[class*="st-key-aivle_user_"]
-[data-testid="stChatMessageContent"] {
-    display: flex !important;
-    align-items: center !important;
-    min-height: 0 !important;
-    padding: 0 !important;
-    margin: 0 !important;
-}
-
-/* 텍스트 중앙 정렬 및 문단 여백 제거 */
-[class*="st-key-aivle_user_"]
-[data-testid="stMarkdownContainer"] p {
-    margin: 0 !important;
-    padding: 0 !important;
-    line-height: 1.4 !important;
-    font-size: .8rem !important;
-}
-
-/* 사용자 프로필 아이콘 */
-[class*="st-key-aivle_user_"]
-[data-testid="stChatMessage"]
-[data-testid^="stChatMessageAvatar"] {
-    width: 22px !important;
-    height: 22px !important;
-    min-width: 22px !important;
-    min-height: 22px !important;
-    padding: 0 !important;
-    margin: 0 !important;
-    border-radius: 7px !important;
-}
-
-/* 아이콘 그림 자체도 작게 */
-[class*="st-key-aivle_user_"]
-[data-testid^="stChatMessageAvatar"] svg {
-    width: 13px !important;
-    height: 13px !important;
-}
-
-/* 모바일에서도 컴팩트하게 */
-@media (max-width: 700px) {
-    [class*="st-key-aivle_user_"]
-    [data-testid="stChatMessage"] {
-        max-width: 94% !important;
-        padding: .3rem .55rem !important;
-    }
-}
-
-/* AIVLE_USER_COMPACT_END */
-</style>
-""", unsafe_allow_html=True)
-# <<< AIVLE_FINE_UI_END
 
 
 def setting(name):
@@ -1142,9 +555,19 @@ if st.session_state.db is None:
 
 for idx, message in enumerate(st.session_state.messages):
     if message["role"] == "user":
-        with st.container(key=f"aivle_user_{idx}"):
-            with st.chat_message("user", avatar=AIVLE_USER_AVATAR):
-                st.markdown(message.get("content", ""))
+        # 단독 HTML 말풍선: 기본 채팅 내부 여백에 영향을 받지 않음
+        safe_question = html.escape(message.get("content", ""))
+        st.markdown(
+            '<div class="aivle-user-row"><div class="aivle-user-bubble">'
+            f'<span class="aivle-user-text">{safe_question}</span>'
+            '<span class="aivle-user-icon" aria-hidden="true">'
+            '<svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" '
+            'stroke-linecap="round" stroke-linejoin="round">'
+            '<circle cx="12" cy="8" r="3.4"/>'
+            '<path d="M5.1 20c.3-3.4 2.7-5.3 6.9-5.3s6.6 1.9 6.9 5.3"/>'
+            '</svg></span></div></div>',
+            unsafe_allow_html=True,
+        )
     else:
         show_assistant(message, idx)
 
@@ -1164,5 +587,3 @@ if question and st.session_state.db is not None:
             "status": "error", "source_ids": [], "sources": [],
         })
     st.rerun()
-
-
