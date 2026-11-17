@@ -348,6 +348,172 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 # <<< AIVLE_UI_END
+# >>> AIVLE_FINE_UI_BEGIN
+from io import BytesIO as _AivleBuffer
+import base64 as _AivleB64
+AIVLE_ASSISTANT_AVATAR = _AivleBuffer(_AivleB64.b64decode('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'))
+AIVLE_USER_AVATAR = ":material/person_outline:"
+
+st.markdown("""
+<style>
+:root {
+    --mint: #19BEC9;
+    --mint-dark: #0AAAB5;
+}
+
+/* 전송 버튼: 빨간색에서 민트색으로 */
+button[data-testid="stChatInputSubmitButton"]:not(:disabled) {
+    background: #19BEC9 !important;
+    border: 1px solid #19BEC9 !important;
+    color: white !important;
+    border-radius: 11px !important;
+    box-shadow: 0 0 15px rgba(25,190,201,.24) !important;
+}
+
+button[data-testid="stChatInputSubmitButton"]:not(:disabled):hover {
+    background: #0AAAB5 !important;
+    box-shadow: 0 0 19px rgba(25,190,201,.31) !important;
+}
+
+button[data-testid="stChatInputSubmitButton"]:disabled {
+    background: #E9F4F5 !important;
+    color: #A1B6BA !important;
+    border: 0 !important;
+}
+
+button[data-testid="stChatInputSubmitButton"] svg {
+    color: inherit !important;
+}
+
+/* 채팅 입력창 민트 글로우 */
+[data-testid="stChatInput"]:focus-within {
+    border-color: #19BEC9 !important;
+    box-shadow:
+        0 0 0 1px rgba(25,190,201,.11),
+        0 0 22px rgba(25,190,201,.20) !important;
+}
+
+[data-testid="stChatInput"] textarea:focus-visible {
+    outline: none !important;
+    box-shadow: none !important;
+}
+
+/* 사용자 메시지: 오른쪽 + 연한 민트 */
+[class*="st-key-aivle_user_"] [data-testid="stChatMessage"] {
+    background: #EAF9F9 !important;
+    border: 1px solid #C6EBEC !important;
+    flex-direction: row-reverse !important;
+    width: fit-content !important;
+    max-width: 87% !important;
+    margin-left: auto !important;
+    margin-right: 0 !important;
+    padding: .66rem .82rem !important;
+    box-shadow: 0 3px 12px rgba(25,190,201,.055) !important;
+}
+
+[class*="st-key-aivle_user_"] [data-testid="stChatMessageContent"] {
+    text-align: left !important;
+}
+
+/* 프로필 아이콘 */
+[data-testid="stChatMessage"] [data-testid^="stChatMessageAvatar"] {
+    background: #EFFBFB !important;
+    color: #0A9DA8 !important;
+    border: 1px solid #BDE7E9 !important;
+    border-radius: 10px !important;
+    width: 29px !important;
+    height: 29px !important;
+    min-width: 29px !important;
+    min-height: 29px !important;
+}
+
+[data-testid="stChatMessage"] [data-testid^="stChatMessageAvatar"] svg {
+    color: #0A9DA8 !important;
+    fill: currentColor !important;
+    width: 17px !important;
+    height: 17px !important;
+}
+
+[data-testid="stChatMessage"] [data-testid^="stChatMessageAvatar"] img {
+    object-fit: contain !important;
+}
+
+/* 작은 본문 글씨 + 편안한 행간 */
+[data-testid="stMarkdownContainer"] p,
+[data-testid="stMarkdownContainer"] li {
+    font-size: .81rem !important;
+    line-height: 1.73 !important;
+    letter-spacing: -.01em;
+}
+
+[data-testid="stMarkdownContainer"] li {
+    margin-bottom: .22rem;
+}
+
+/* 버튼 크기 정리 */
+.stButton button,
+[data-testid="stFormSubmitButton"] button {
+    min-height: 31px !important;
+    font-size: .75rem !important;
+    padding: .29rem .74rem !important;
+    border-radius: 10px !important;
+}
+
+/* 답변 출처 카드 */
+[data-testid="stExpander"] {
+    background: #FCFEFE !important;
+    border: 1px solid #D8ECEE !important;
+    border-radius: 13px !important;
+    overflow: hidden;
+}
+
+[data-testid="stExpander"] summary {
+    font-size: .76rem !important;
+    color: #087E87 !important;
+    padding: .42rem .65rem !important;
+}
+
+[data-testid="stExpander"] [data-testid="stExpanderDetails"] {
+    padding: .5rem .75rem .7rem !important;
+}
+
+[data-testid="stExpander"] [data-testid="stText"] {
+    font-size: .72rem !important;
+    line-height: 1.65 !important;
+    white-space: pre-wrap !important;
+    overflow-wrap: anywhere !important;
+    color: #587178 !important;
+}
+
+/* PDF 업로더 */
+[data-testid="stFileUploader"] {
+    padding: 11px 13px 9px !important;
+}
+
+[data-testid="stFileUploaderDropzone"] {
+    min-height: 64px;
+    border-radius: 14px !important;
+}
+
+[data-testid="stFileUploader"] small {
+    font-size: .74rem !important;
+    line-height: 1.6 !important;
+}
+
+[data-testid="stFileUploaderDropzone"] button {
+    font-size: .75rem !important;
+    min-height: 28px !important;
+}
+
+/* 작은 화면 */
+@media (max-width:700px) {
+    [class*="st-key-aivle_user_"] [data-testid="stChatMessage"] {
+        max-width: 94% !important;
+    }
+}
+</style>
+""", unsafe_allow_html=True)
+# <<< AIVLE_FINE_UI_END
 
 
 def setting(name):
@@ -753,8 +919,9 @@ if st.session_state.db is None:
 
 for idx, message in enumerate(st.session_state.messages):
     if message["role"] == "user":
-        with st.chat_message("user", avatar=USER_AVATAR):
-            st.markdown(message.get("content", ""))
+        with st.container(key=f"aivle_user_{idx}"):
+            with st.chat_message("user", avatar=AIVLE_USER_AVATAR):
+                st.markdown(message.get("content", ""))
     else:
         show_assistant(message, idx)
 
