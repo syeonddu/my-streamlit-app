@@ -2,6 +2,7 @@
 # 코랩의 '%%writefile /content/app.py' 다음 줄부터 이 코드 전체를 붙여 넣으세요.
 import hashlib
 import os
+import re
 import smtplib
 import tempfile
 import uuid
@@ -105,8 +106,11 @@ def search_query(question, history):
 
 
 def find_docs(db, question, history):
-    rewritten = search_query(question, history)
-    queries = list(dict.fromkeys([rewritten, question]))
+    normalized = question
+    for alias in ("에이블스쿨", "에이블 스쿨", "에이블학교"):
+        normalized = normalized.replace(alias, "AIVLE School")
+    rewritten = search_query(normalized, history)
+    queries = list(dict.fromkeys([rewritten, normalized, question]))
     if any(word in rewritten + question for word in ("선배", "후배", "수료생", "노하우", "취업")):
         queries.append("AIVLE School 수료생 경험 및 조언 코딩테스트 공모전 프로젝트 취업 준비")
     if "오류" in rewritten + question:
@@ -180,21 +184,33 @@ def admin_mail_ready():
     return all(setting(k) for k in ("GMAIL_ADDRESS", "GMAIL_APP_PASSWORD", "ADMIN_EMAIL"))
 
 
-def send_admin_email(question):
+def send_admin_email(inquiry, reply_email):
+    """Send a visitor's inquiry to ADMIN_EMAIL and let the admin reply directly."""
     sender = setting("GMAIL_ADDRESS")
     password = setting("GMAIL_APP_PASSWORD")
     recipient = setting("ADMIN_EMAIL")
+    reply_email = reply_email.strip()
+    inquiry = inquiry.strip()
+
     if not all((sender, password, recipient)):
         raise ValueError("관리자 메일 발송 설정이 없습니다.")
+    if not re.fullmatch(r"[^\s@]+@[^\s@]+\.[^\s@]+", reply_email):
+        raise ValueError("답변받을 이메일 주소를 확인해 주세요.")
+    if not inquiry:
+        raise ValueError("문의 내용을 입력해 주세요.")
+
     mail = EmailMessage()
     mail["From"] = sender
     mail["To"] = recipient
-    mail["Subject"] = "[AIVLE 학습 도우미] 백서 미답변 질문"
+    mail["Reply-To"] = reply_email
+    mail["Subject"] = "[AIVLE 학습 도우미] 사용자 문의"
     mail.set_content(
-        "AIVLE School 백서 챗봇에서 충분히 답변하지 못한 질문입니다.\n\n"
-        + "질문:\n" + question[:1500] + "\n\n"
-        + "※ 사용자가 관리자 문의 버튼을 눌러 전송했습니다."
+        "AIVLE School 학습 도우미에서 전달한 문의입니다.\n\n"
+        f"[문의 내용]\n{inquiry[:2000]}\n\n"
+        f"[답변받을 이메일 주소]\n{reply_email}\n\n"
+        "이 메일에 답장하면 문의자가 입력한 주소로 회신할 수 있습니다."
     )
+
     with smtplib.SMTP("smtp.gmail.com", 587, timeout=20) as smtp:
         smtp.starttls()
         smtp.login(sender, password)
@@ -206,29 +222,72 @@ def show_assistant(message, idx):
         st.markdown(message.get("answer", message.get("content", "")))
         ids = message.get("source_ids", [])
         sources = message.get("sources", [])
+
+        # Feature 1: answer citations. Keep the label requested by the user.
         if ids:
             pages = list(dict.fromkeys(sources[i - 1]["page"] for i in ids))
-            st.caption("📚 답변 출처: AIVLE School 백서 " + ", ".join(pages))
-            with st.expander("답변에 사용한 백서 근거 보기"):
+            with st.expander("📚 답변 출처"):
+                st.caption("AIVLE School 백서 " + ", ".join(pages))
                 for i in ids:
                     src = sources[i - 1]
                     st.markdown(f"**[자료 {i}] 백서 {src['page']}**")
-                    st.text(src["text"][:950] + ("…" if len(src["text"]) > 950 else ""))
+                    excerpt = src["text"][:950]
+                    st.text(excerpt + ("…" if len(src["text"]) > 950 else ""))
+
+        # Feature 2: show an inquiry form for answers not fully supported.
         if message.get("status") in ("partial", "not_found"):
-            st.caption("백서만으로 확인되지 않는 내용은 관리자에게 문의할 수 있어요.")
-            if not admin_mail_ready():
-                st.caption("✉️ 메일 발송 준비 전: Streamlit Secrets에 Gmail 및 관리자 주소를 등록해야 해요.")
-            if st.button(
-                "📮 관리자에게 이 질문 보내기" if not message.get("sent") else "✅ 관리자에게 전달 완료",
-                key=f"mail_question_{idx}",
-                disabled=message.get("sent", False) or not admin_mail_ready(),
-            ):
-                try:
-                    send_admin_email(message.get("question", ""))
-                    message["sent"] = True
-                    st.success("관리자에게 질문 이메일을 보냈어요!")
-                except Exception:
-                    st.error("메일 전송에 실패했어요. Gmail 앱 비밀번호와 관리자 이메일 설정을 확인해 주세요.")
+            st.caption("백서에서 확인되지 않는 내용은 담당자에게 문의할 수 있어요.")
+
+            if message.get("sent"):
+                st.success("✅ 문의가 담당자에게 전송됐어요.")
+            elif not admin_mail_ready():
+                st.caption(
+                    "✉️ 메일 발송 준비 전: Streamlit Secrets에 "
+                    "GMAIL_ADDRESS, GMAIL_APP_PASSWORD, ADMIN_EMAIL을 등록해 주세요."
+                )
+            else:
+                form_key = f"inquiry_open_{idx}"
+                if st.button("📮 담당자에게 문의하기", key=f"inquiry_open_btn_{idx}"):
+                    st.session_state[form_key] = not st.session_state.get(form_key, False)
+
+                if st.session_state.get(form_key, False):
+                    with st.form(key=f"inquiry_form_{idx}"):
+                        inquiry = st.text_area(
+                            "문의 내용",
+                            value=message.get("question", ""),
+                            max_chars=2000,
+                            height=140,
+                        )
+                        reply_email = st.text_input(
+                            "답변받을 이메일 주소",
+                            placeholder="example@gmail.com",
+                        )
+                        st.caption(
+                            "입력한 이메일 주소는 담당자에게 전달되며, "
+                            "담당자가 답변할 때 사용됩니다."
+                        )
+                        submitted = st.form_submit_button("문의 보내기", type="primary")
+
+                    if submitted:
+                        if not inquiry.strip():
+                            st.warning("문의 내용을 입력해 주세요.")
+                        elif not re.fullmatch(
+                            r"[^\s@]+@[^\s@]+\.[^\s@]+",
+                            reply_email.strip(),
+                        ):
+                            st.warning("답변받을 이메일 주소를 정확히 입력해 주세요.")
+                        else:
+                            try:
+                                send_admin_email(inquiry, reply_email)
+                            except Exception:
+                                st.error(
+                                    "메일 전송에 실패했어요. "
+                                    "메일 계정 설정이나 네트워크를 확인해 주세요."
+                                )
+                            else:
+                                message["sent"] = True
+                                st.session_state[form_key] = False
+                                st.rerun()
 
 
 for key, default in (("db", None), ("active_source", None), ("messages", [])):
