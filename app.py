@@ -656,6 +656,84 @@ button[data-testid="stChatInputSubmitButton"] svg {
 
 /* AIVLE_CHAT_SPACING_END */
 
+
+/* AIVLE_USER_COMPACT_BEGIN */
+
+/* 사용자 메시지 위쪽 불필요한 간격 줄이기 */
+[class*="st-key-aivle_user_"] {
+    margin-top: 0 !important;
+    margin-bottom: .65rem !important;
+}
+
+/* 사용자 말풍선 크기와 패딩 */
+[class*="st-key-aivle_user_"]
+[data-testid="stChatMessage"] {
+    display: flex !important;
+    flex-direction: row-reverse !important;
+    align-items: center !important;
+
+    width: fit-content !important;
+    max-width: 87% !important;
+    min-height: 0 !important;
+
+    padding: .32rem .65rem !important;
+    margin: 0 0 .65rem auto !important;
+    gap: .45rem !important;
+
+    background: #EAF9F9 !important;
+    border: 1px solid #C6EBEC !important;
+    border-radius: 16px !important;
+}
+
+/* 내부 요소의 높이와 기본 여백 제거 */
+[class*="st-key-aivle_user_"]
+[data-testid="stChatMessageContent"] {
+    display: flex !important;
+    align-items: center !important;
+    min-height: 0 !important;
+    padding: 0 !important;
+    margin: 0 !important;
+}
+
+/* 텍스트 중앙 정렬 및 문단 여백 제거 */
+[class*="st-key-aivle_user_"]
+[data-testid="stMarkdownContainer"] p {
+    margin: 0 !important;
+    padding: 0 !important;
+    line-height: 1.4 !important;
+    font-size: .8rem !important;
+}
+
+/* 사용자 프로필 아이콘 */
+[class*="st-key-aivle_user_"]
+[data-testid="stChatMessage"]
+[data-testid^="stChatMessageAvatar"] {
+    width: 22px !important;
+    height: 22px !important;
+    min-width: 22px !important;
+    min-height: 22px !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    border-radius: 7px !important;
+}
+
+/* 아이콘 그림 자체도 작게 */
+[class*="st-key-aivle_user_"]
+[data-testid^="stChatMessageAvatar"] svg {
+    width: 13px !important;
+    height: 13px !important;
+}
+
+/* 모바일에서도 컴팩트하게 */
+@media (max-width: 700px) {
+    [class*="st-key-aivle_user_"]
+    [data-testid="stChatMessage"] {
+        max-width: 94% !important;
+        padding: .3rem .55rem !important;
+    }
+}
+
+/* AIVLE_USER_COMPACT_END */
 </style>
 """, unsafe_allow_html=True)
 # <<< AIVLE_FINE_UI_END
