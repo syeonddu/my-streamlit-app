@@ -19,6 +19,10 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 
 # >>> AIVLE_UI_BEGIN
+from pathlib import Path
+
+AIVLE_ASSISTANT_AVATAR = "/content/aivle_logo.png" if Path("/content/aivle_logo.png").exists() else ":material/school:"
+USER_AVATAR = ":material/person:"
 
 st.set_page_config(
     page_title="AIVLE School | 학습 도우미",
@@ -30,20 +34,20 @@ st.markdown("""
 <style>
 :root {
     --mint: #19BEC9;
-    --deep: #087E87;
-    --ink: #233541;
-    --line: #DAEEEE;
+    --mint-soft: #ECFCFC;
+    --mint-line: #CDEEEF;
+    --mint-glow: rgba(25,190,201,0.18);
+    --deep: #17313A;
+    --text: #24343C;
+    --sub: #6D7F86;
+    --card: #FFFFFF;
+    --bg: #F8FCFC;
 }
 
-/* 전체 배경과 콘텐츠 너비 */
+/* 전체 */
 .stApp {
-    background: linear-gradient(
-        155deg,
-        #FFFFFF 0%,
-        #FBFEFE 58%,
-        #F4FCFC 100%
-    );
-    color: var(--ink);
+    background: linear-gradient(180deg, #FCFEFE 0%, #F7FBFB 100%);
+    color: var(--text);
 }
 
 [data-testid="stHeader"] {
@@ -51,236 +55,281 @@ st.markdown("""
 }
 
 .block-container {
-    max-width: 850px !important;
-    padding-top: 1.7rem !important;
-    padding-bottom: 6rem !important;
+    max-width: 640px !important;   /* 기존보다 좁게 */
+    padding-top: 1.2rem !important;
+    padding-bottom: 5.5rem !important;
 }
 
-/* 작고 읽기 편한 글자 */
+/* 전반 텍스트 축소 */
+html, body, [class*="css"] {
+    font-size: 14px !important;
+}
+
 [data-testid="stMarkdownContainer"] p,
-[data-testid="stMarkdownContainer"] li {
-    font-size: .9rem;
-    line-height: 1.75;
-    color: var(--ink);
+[data-testid="stMarkdownContainer"] li,
+label,
+.stTextInput label,
+.stTextArea label {
+    font-size: 0.84rem !important;
+    line-height: 1.72 !important;
+    color: var(--text);
 }
 
 [data-testid="stMarkdownContainer"] h1 {
-    font-size: 1.4rem;
+    font-size: 1.05rem !important;
 }
 
 [data-testid="stMarkdownContainer"] h2 {
-    font-size: 1.2rem;
+    font-size: 0.98rem !important;
 }
 
-label,
-[data-testid="stWidgetLabel"] p {
-    font-size: .82rem !important;
+[data-testid="stCaptionContainer"] p {
+    font-size: 0.74rem !important;
+    color: var(--sub) !important;
 }
 
-/* 헤더 카드 */
+/* 헤더 */
 .aivle-hero {
-    background: #FFFFFF;
-    border: 1px solid var(--line);
-    border-radius: 20px;
-    padding: 20px 23px 18px;
-    margin-bottom: 1.15rem;
+    background: rgba(255,255,255,0.88);
+    border: 1px solid rgba(25,190,201,0.12);
+    border-radius: 22px;
+    padding: 18px 20px 16px;
+    margin-bottom: 1rem;
     box-shadow:
-        0 9px 24px rgba(25,190,201,.06),
-        0 0 17px rgba(25,190,201,.06);
+        0 8px 24px rgba(25,190,201,0.05),
+        0 0 18px rgba(25,190,201,0.05);
 }
 
-.aivle-brand {
+.aivle-brand-row {
     display: flex;
     align-items: center;
-    gap: 9px;
-    margin-bottom: 11px;
+    gap: 10px;
+    margin-bottom: 10px;
 }
 
-.aivle-mark {
-    display: grid;
-    place-items: center;
-    width: 24px;
-    height: 24px;
-    border: 1px solid #B7E6E9;
-    border-radius: 9px;
-    background: #EAFAFB;
-    color: var(--deep);
-    font-size: .76rem;
-    box-shadow: 0 0 11px rgba(25,190,201,.15);
-}
-
-.aivle-kicker {
-    font-size: .7rem;
+.aivle-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    border: 1px solid rgba(25,190,201,0.16);
+    border-radius: 999px;
+    background: rgba(25,190,201,0.05);
+    padding: 6px 10px;
+    font-size: 0.72rem;
     font-weight: 700;
-    letter-spacing: .075em;
-    color: var(--deep);
+    letter-spacing: 0.08em;
+    color: #118B94;
+}
+
+.aivle-badge-dot {
+    width: 14px;
+    height: 14px;
+    border-radius: 8px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: #FFFFFF;
+    border: 1px solid rgba(25,190,201,0.18);
+    box-shadow: 0 0 10px rgba(25,190,201,0.18);
+    font-size: 0.56rem;
 }
 
 .aivle-title {
-    font-size: 1.35rem;
-    font-weight: 700;
-    letter-spacing: -.04em;
-    margin-bottom: 5px;
-    color: #1D3440;
+    font-size: 0.82rem;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    color: var(--deep);
+    margin: 0 0 3px 0;
 }
 
-.aivle-desc {
-    font-size: .83rem;
-    line-height: 1.7;
-    color: #73858D;
+.aivle-sub {
+    font-size: 0.76rem;
+    color: var(--sub);
     margin: 0;
+    line-height: 1.65;
 }
 
-/* PDF 업로드 */
+/* 업로더 */
 [data-testid="stFileUploader"] {
-    background: #FFFFFF;
-    border: 1px solid var(--line);
-    border-radius: 17px;
-    padding: 13px 15px 8px;
-    margin-bottom: .6rem;
+    background: rgba(255,255,255,0.90);
+    border: 1px solid rgba(25,190,201,0.12);
+    border-radius: 20px;
+    padding: 12px 14px 8px;
+    box-shadow:
+        0 6px 18px rgba(25,190,201,0.04);
 }
 
 [data-testid="stFileUploaderDropzone"] {
     background: #FCFEFE;
-    border: 1px dashed #B7E3E6;
-    border-radius: 13px;
+    border: 1px dashed rgba(25,190,201,0.20);
+    border-radius: 16px;
 }
 
-[data-testid="stFileUploaderDropzone"] button {
-    font-size: .78rem !important;
-}
-
-/* 알림 */
-[data-testid="stAlert"] {
-    border-radius: 13px;
-}
-
-/* 채팅 카드 */
+/* 채팅 메시지 공통 */
 [data-testid="stChatMessage"] {
-    background: #FFFFFF;
-    border: 1px solid #E3F0F1;
-    border-radius: 17px;
-    padding: .78rem .9rem;
-    margin-bottom: .72rem;
-    box-shadow: 0 5px 19px rgba(25,100,110,.035);
+    background: rgba(255,255,255,0.92);
+    border: 1px solid #E2F0F1;
+    border-radius: 20px;
+    padding: 0.75rem 0.85rem;
+    margin-bottom: 0.75rem;
+    box-shadow: 0 6px 18px rgba(25,190,201,0.03);
 }
 
-/* 사용자 채팅은 연한 민트 */
-[data-testid="stChatMessage"][aria-label*="user"],
-[data-testid="stChatMessage"][aria-label*="User"] {
-    background: #F1FBFB;
-    border-color: #CDECEF;
-}
-
-/* 작은 프로필 아이콘 */
+/* 아바타 박스 */
 [data-testid="stChatMessageAvatarUser"],
 [data-testid="stChatMessageAvatarAssistant"] {
-    width: 28px !important;
-    height: 28px !important;
-    min-width: 28px !important;
-    min-height: 28px !important;
-    border-radius: 10px !important;
+    width: 30px !important;
+    height: 30px !important;
+    min-width: 30px !important;
+    min-height: 30px !important;
+    border-radius: 12px !important;
+    overflow: hidden !important;
+    border: 1px solid rgba(25,190,201,0.14);
+    background: linear-gradient(180deg, #FFFFFF 0%, #F5FEFE 100%);
+    box-shadow: 0 0 14px rgba(25,190,201,0.10);
 }
 
-/* 채팅 입력창 */
-[data-testid="stChatInput"] {
-    background: #FFFFFF !important;
-    border: 1px solid #B6E4E7 !important;
-    border-radius: 16px !important;
-    box-shadow: 0 0 15px rgba(25,190,201,.1);
+/* 사용자 메시지 - 오른쪽 */
+[data-testid="stChatMessage"][aria-label*="user"],
+[data-testid="stChatMessage"][aria-label*="User"] {
+    flex-direction: row-reverse;
+    background: var(--mint-soft);
+    border: 1px solid var(--mint-line);
+    margin-left: 56px;
 }
 
-[data-testid="stChatInput"] textarea {
-    font-size: .87rem !important;
+[data-testid="stChatMessage"][aria-label*="user"] [data-testid="stChatMessageContent"],
+[data-testid="stChatMessage"][aria-label*="User"] [data-testid="stChatMessageContent"] {
+    text-align: left;
 }
 
-/* 답변 출처 */
+/* 챗봇 메시지 - 왼쪽 */
+[data-testid="stChatMessage"][aria-label*="assistant"],
+[data-testid="stChatMessage"][aria-label*="Assistant"] {
+    margin-right: 56px;
+}
+
+/* expander */
 [data-testid="stExpander"] {
-    background: #FCFEFE;
-    border: 1px solid var(--line);
-    border-radius: 13px;
-    margin-top: .6rem;
+    background: rgba(255,255,255,0.88);
+    border: 1px solid rgba(25,190,201,0.12);
+    border-radius: 16px;
+    margin-top: 0.55rem;
 }
 
 [data-testid="stExpander"] summary {
-    font-size: .83rem !important;
-    color: var(--deep);
+    font-size: 0.82rem !important;
+    color: #118B94 !important;
+    font-weight: 600 !important;
 }
 
-[data-testid="stCaptionContainer"] p {
-    font-size: .77rem !important;
-    color: #73858D !important;
-}
-
-/* 담당자 문의 폼 */
+/* 폼 */
 [data-testid="stForm"] {
-    background: #FFFFFF;
-    border: 1px solid var(--line);
-    border-radius: 16px;
-    padding: 15px 16px 8px;
+    background: rgba(255,255,255,0.92);
+    border: 1px solid rgba(25,190,201,0.12);
+    border-radius: 18px;
+    padding: 14px 14px 8px;
     margin-top: 8px;
+    box-shadow: 0 6px 18px rgba(25,190,201,0.04);
 }
 
+/* 텍스트 입력 / 텍스트영역 */
 [data-testid="stTextInput"] input,
 [data-testid="stTextArea"] textarea {
-    background: #FCFEFE;
-    border: 1px solid #D1E8EA;
-    border-radius: 12px;
-    font-size: .86rem;
+    background: #FCFEFE !important;
+    border: 1px solid rgba(25,190,201,0.16) !important;
+    border-radius: 14px !important;
+    color: var(--text) !important;
+    font-size: 0.82rem !important;
+    box-shadow: none !important;
 }
 
-/* 작고 둥근 버튼 */
+[data-testid="stTextInput"] input:focus,
+[data-testid="stTextArea"] textarea:focus {
+    border: 1px solid rgba(25,190,201,0.34) !important;
+    box-shadow:
+        0 0 0 1px rgba(25,190,201,0.08),
+        0 0 14px rgba(25,190,201,0.10) !important;
+}
+
+/* 하단 채팅 입력창 */
+[data-testid="stChatInput"] {
+    background: rgba(255,255,255,0.96) !important;
+    border: 1px solid rgba(25,190,201,0.24) !important;
+    border-radius: 18px !important;
+    box-shadow:
+        0 0 0 1px rgba(25,190,201,0.06),
+        0 0 22px rgba(25,190,201,0.14) !important;
+}
+
+[data-testid="stChatInput"] > div {
+    border: none !important;
+    box-shadow: none !important;
+    border-radius: 18px !important;
+    background: transparent !important;
+}
+
+[data-testid="stChatInput"] textarea {
+    font-size: 0.84rem !important;
+    color: var(--text) !important;
+}
+
+[data-testid="stChatInput"] textarea::placeholder {
+    color: #8798A0 !important;
+}
+
+/* 빨간 outline 죽이기 */
+textarea:focus, input:focus, button:focus {
+    outline: none !important;
+    box-shadow:
+        0 0 0 1px rgba(25,190,201,0.08),
+        0 0 14px rgba(25,190,201,0.12) !important;
+}
+
+/* 버튼 */
 .stButton button,
 [data-testid="stFormSubmitButton"] button {
     min-height: 34px;
-    border-radius: 11px;
-    padding: .32rem .83rem;
-    font-size: .8rem;
-    border: 1px solid #B7E4E7;
-    color: var(--deep);
+    border-radius: 12px;
+    padding: .32rem .78rem;
+    font-size: 0.79rem;
+    font-weight: 600;
     background: #FFFFFF;
-    transition:
-        box-shadow .18s ease,
-        border-color .18s ease;
+    color: #118B94;
+    border: 1px solid rgba(25,190,201,0.16);
+    box-shadow: 0 4px 12px rgba(25,190,201,0.05);
 }
 
 .stButton button:hover,
 [data-testid="stFormSubmitButton"] button:hover {
-    border-color: var(--mint);
-    box-shadow: 0 0 15px rgba(25,190,201,.19);
+    border-color: rgba(25,190,201,0.34);
+    box-shadow:
+        0 0 14px rgba(25,190,201,0.12),
+        0 4px 14px rgba(25,190,201,0.07);
 }
 
-/* 중요 버튼 */
-.stButton button[kind="primary"],
 [data-testid="stFormSubmitButton"] button[kind="primary"] {
-    background: var(--deep);
-    color: #FFFFFF;
-    border-color: var(--deep);
+    background: linear-gradient(180deg, #19BEC9 0%, #14AEB8 100%);
+    color: white;
+    border: 1px solid rgba(25,190,201,0.20);
 }
 
-button:disabled {
-    opacity: .52;
-    box-shadow: none !important;
-}
-
-/* 작은 화면 */
-@media (max-width:700px) {
+/* 모바일 */
+@media (max-width: 760px) {
     .block-container {
-        padding: 1rem 1rem 5rem !important;
+        max-width: 100% !important;
+        padding-left: 0.9rem !important;
+        padding-right: 0.9rem !important;
     }
 
-    .aivle-hero {
-        padding: 16px 17px;
+    [data-testid="stChatMessage"][aria-label*="user"],
+    [data-testid="stChatMessage"][aria-label*="User"] {
+        margin-left: 18px;
     }
 
-    .aivle-title {
-        font-size: 1.2rem;
-    }
-}
-
-@media (prefers-reduced-motion:reduce) {
-    .stButton button {
-        transition: none;
+    [data-testid="stChatMessage"][aria-label*="assistant"],
+    [data-testid="stChatMessage"][aria-label*="Assistant"] {
+        margin-right: 18px;
     }
 }
 </style>
@@ -288,19 +337,16 @@ button:disabled {
 
 st.markdown("""
 <div class="aivle-hero">
-    <div class="aivle-brand">
-        <span class="aivle-mark">✦</span>
-        <span class="aivle-kicker">
+    <div class="aivle-brand-row">
+        <div class="aivle-badge">
+            <span class="aivle-badge-dot">✦</span>
             AIVLE SCHOOL · DX TRACK
-        </span>
+        </div>
     </div>
     <div class="aivle-title">학습 도우미</div>
-    <p class="aivle-desc">
-        백서를 바탕으로 답하고, 근거를 확인해 드려요.
-    </p>
+    <p class="aivle-sub">백서를 바탕으로 답하고, 근거를 확인해 드려요.</p>
 </div>
 """, unsafe_allow_html=True)
-
 # <<< AIVLE_UI_END
 
 
@@ -607,7 +653,7 @@ def send_admin_email(inquiry, reply_email):
 
 
 def show_assistant(message, idx):
-    with st.chat_message("assistant"):
+    with st.chat_message("assistant", avatar=AIVLE_ASSISTANT_AVATAR):
         st.markdown(message.get("answer", message.get("content", "")))
         ids = message.get("source_ids", [])
         sources = message.get("sources", [])
@@ -707,7 +753,7 @@ if st.session_state.db is None:
 
 for idx, message in enumerate(st.session_state.messages):
     if message["role"] == "user":
-        with st.chat_message("user"):
+        with st.chat_message("user", avatar=USER_AVATAR):
             st.markdown(message.get("content", ""))
     else:
         show_assistant(message, idx)
